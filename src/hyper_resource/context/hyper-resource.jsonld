@@ -1,0 +1,172 @@
+{
+	"@context": {
+		"hr": "http://127.0.0.1:8000/core#",
+		"hydra": "http://www.w3.org/ns/hydra/core#",
+		"rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+		"owl": "http://www.w3.org/2002/07/owl#",
+		"schema": "http://schema.org/",
+		"comment": "rdfs:comment",
+		"label": "rdfs:label",
+		"domain": {
+			"@id": "rdfs:domain",
+			"@type": "@vocab"
+		},
+		"range": {
+			"@id": "rdfs:range",
+			"@type": "@vocab"
+		},
+		"subClassOf": {
+			"@id": "rdfs:subClassOf",
+			"@type": "@vocab"
+		},
+		"example": {
+			"@type": "https://schema.org/Text"
+		},
+		"defines": {
+			"@reverse": "rdfs:isDefinedBy"
+		},
+		"domainIncludes": {
+			"@id": "schema:domainIncludes",
+			"@type": "@id"
+		}
+	},
+	"@id": "http://www.hyper-resource.org/core#",
+	"@type": "owl:Ontology",
+	"label": "The Hyper Resource Core Vocabulary",
+	"defines": [
+		{
+			"@id": "hr:Resource",
+			"@type": "rdfs:Resource",
+			"label": "Resource of Hyper Resource",
+			"comment": "The class of dereferenceable resources by means a client can attempt to dereference; however, the received responses should still be verified."
+		},
+		{
+			"@id": "hr:Class",
+			"@type": [
+				"hr:Resource",
+				"rdfs:Class"
+			],
+			"subClassOf": [
+				"rdfs:Class"
+			],
+			"label": "Hyper Resource Class",
+			"comment": "The class of Hyper Resource classes."
+		},
+		{
+			"@id": "hr:Operation",
+			"@type": "hr:Class",
+			"label": "Operation",
+			"comment": "An operation."
+		},
+		{
+			"@id": "hr:supportedOperations",
+			"@container": "@list",
+			"@type": "rdf:Property",		
+			"label": "supported operation",
+			"comment": "An list of operations supported by instances of the specific Hyper Resource class",
+			"domain": "hr:Resource",
+			"range": "hydra:Operation"
+		},
+		{
+			"@id": "hydra:method",
+			"@type": "rdf:Property",
+			"label": "method",
+			"comment": "The HTTP method.",
+			"domain": "hr:Operation",
+			"range": "schema:Text"
+		},
+		{
+			"@id": "hydra:expectsHeader",
+			"@type": "rdf:Property",
+			"label": "expects header",
+			"comment": "Specification of the header expected by the operation.",
+			"domain": "hr:Operation"
+
+		},
+		{
+			"@id": "hr:appendPath",
+			"@type": "rdf:Property",
+			"label": "Operation URL path",
+			"comment": "Specification of the path expected to be appended to current URL with placeholders to be fulfiled according with operation params",
+			"domain": "hr:Operation",
+			"range": "schema:Text"
+		},
+		{
+			"@id": "hr:parameters",
+			"@container": "@list",
+			"@type": "rdf:Property",		
+			"label": "Operation parameters",
+			"comment": "The list of informations expected by the Web API in a given operation",
+			"domain": "hr:Operation",
+			"range": "hr:OperationParameter"
+		},
+		{
+			"@id": "hr:OperationParameter",
+			"@type": "hr:Class",
+			"label": "Operation parameter",
+			"comment": "Parameter of a given operation"
+		},
+
+		{
+			"@id": "hr:SupportedProperty",
+			"@type": "hr:Class",
+			"label": "Supported Property",
+			"comment": "A property known to be supported by a Hyper Resource Class.",
+			"isDefinedBy": "http://127.0.0.1:8000/core#"
+		},
+		{
+			"@id": "hr:property",
+			"@type": "rdf:Property",
+			"label": "property",
+			"comment": "The property name",
+			"domain": "hr:SupportedProperty",
+			"range": "schema:Text",
+			"isDefinedBy": "http://127.0.0.1:8000/core#"
+		},
+		{
+			"@id": "hr:isExternal",
+			"@type": "rdf:Property",
+			"label": "isExternal",
+			"comment": "True if the property value is a dereferencable, false if the property value belongs to the current resource",
+			"domain": "hr:SupportedProperty",
+			"range": "schema:Boolean",
+			"isDefinedBy": "http://127.0.0.1:8000/core#"
+		},
+		{
+            "@id": "hr:required",
+            "@type": "rdf:Property",
+            "label": "required",
+            "comment": "True if the property is required, false otherwise.",
+            "range": "schema:Boolean",
+            "domain": "hr:SupportedProperty",
+            "isDefinedBy": "http://127.0.0.1:8000/core#"
+        },
+		 {
+            "@id": "hr:readable",
+            "@type": "rdf:Property",
+            "label": "readable",
+            "comment": "True if the client can retrieve the property's value, false otherwise.",
+            "domain": "hr:SupportedProperty",
+            "range": "schema:Boolean",
+            "isDefinedBy": "http://127.0.0.1:8000/core#"
+        },
+        {
+            "@id": "hr:writable",
+            "@type": "rdf:Property",
+            "label": "writable",
+            "comment": "True if the client can change the property's value, false otherwise.",
+            "domain": "hr:SupportedProperty",
+            "range": "schema:Boolean",
+            "isDefinedBy": "http://127.0.0.1:8000/core#"
+        },
+		{
+			"@id": "hr:supportedProperties",
+			"@container": "@list",
+			"@type": "rdf:Property",
+			"label": "supported properties",
+			"comment": "An list of properties supported by instances of the specific Hyper Resource class",
+			"domain": "hr:Resource",
+			"range": "hr:SupportedProperty"
+		}
+	]
+}

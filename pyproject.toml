@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "hyper-resource-sanic-2"
+version = "0.1.0"
+description = ""
+authors = ["RogerioBorba <rogerio.borba17@gmail.com>"]
+readme = "README.md"
+packages = [{include = "hyper_resource_sanic_2"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pandas = "^2.0.3"
+geopandas = "^0.13.2"
+sanic = {extras = ["ext"], version = "^23.3.0"}
+environs = "^9.5.0"
+matplotlib = "^3.7.2"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.19"}
+asyncio = "^3.4.3"
+geoalchemy2 = "^0.14.0"
+aiohttp = "^3.8.4"
+asyncpg = "^0.28.0"
+openpyxl = "^3.1.2"
+psycopg2 = "^2.9.6"
+spatialite = "^0.0.3"
+httpx = "^0.24.1"
+dicttoxml = "^1.7.16"
+fsspec = "^2023.6.0"
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
