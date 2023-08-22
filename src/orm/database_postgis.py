@@ -69,7 +69,7 @@ class DialectDbPostgis(DialectDbPostgresql):
         sub_query += where or ''
         sub_query += order_by or ''
         geom = self.entity_class.geo_column_name()
-        if list_attribute == None:
+        if list_attribute is None:
             sub_query = sub_query.replace(f'ST_AsEWKB({geom})', geom)
         query: str = self.geobuf_query(sub_query) #f"SELECT  ST_AsGeobuf(q, '{geom}') FROM ({sub_query}) AS q"
         rows = await self.fetch_all_by(query)
@@ -91,7 +91,7 @@ class DialectDbPostgis(DialectDbPostgresql):
     async def extent(self, sub_query: str) -> List[float]:
         query: str = f"SELECT ST_Extent({self.get_geom_column()}) FROM ({sub_query or self.schema_table_name()}) AS q"
         rows: list = await self.fetch_all_by(query)
-        s: str = rows[0]['st_extent']
+        s: str = rows[0]._mapping['st_extent']
         coords = s.removeprefix('BOX(').removesuffix(')').split(',')[0].split(' ') + \
                  s.removeprefix('BOX(').removesuffix(')').split(',')[1].split(' ')
         return [float(coord) for coord in coords]

@@ -24,6 +24,8 @@ spatialite = "^0.0.3"
 httpx = "^0.24.1"
 dicttoxml = "^1.7.16"
 fsspec = "^2023.6.0"
+pytest = "^7.4.0"
+cartopy = "^0.22.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

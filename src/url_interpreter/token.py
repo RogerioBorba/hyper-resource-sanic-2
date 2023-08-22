@@ -1,10 +1,7 @@
 from typing import Optional, List
-
 import aiohttp
-
 from src.hyper_resource.common_resource import CONTENT_TYPE_JSON
 from src.orm.action_type import ActionFunction
-from src.orm.converter import ConverterType
 from src.orm.database import DialectDatabase
 from src.orm.models import AlchemyBase
 from src.url_interpreter.interpreter_error import PathError

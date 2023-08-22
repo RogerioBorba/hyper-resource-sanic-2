@@ -50,8 +50,9 @@ class AlchemyBase(Base):
         return isinstance(attribute, InstrumentedAttribute) and isinstance(attribute.prop, RelationshipProperty)
 
     @classmethod
-    def is_relationship_fk_attribute(cls, attribute):
-        return cls.is_relationship_attribute(attribute) and attribute.prop._user_defined_foreign_keys is not None
+    def is_relationship_fk_attribute(cls, attribute: InstrumentedAttribute) -> bool:
+
+        return cls.is_relationship_attribute(attribute) and hasattr(attribute, 'foreign_keys') and len(attribute.foreign_keys) > 0
 
     @classmethod
     def column_name_or_None(cls, inst_attr: InstrumentedAttribute):

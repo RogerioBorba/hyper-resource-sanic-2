@@ -76,10 +76,13 @@ class AbstractCollectionResource(AbstractResource):
         else:
             return await self.get_json_representation()
 
-    def first_word(self, path: str)->str:
+    def first_word(self, path: str) -> str:
         """
-        :param path: is a substr from iri.  Ex.: filter/first_name/eq/John
-        :return: the first word in path
+        Returns the first word in path (str)
+        Parameters
+        path (str): is a substr from iri.  Ex.: filter/first_name/eq/John
+        Return
+         the first word in path (str)
         """
         return path.split('/')[0].strip().lower()
 
@@ -158,6 +161,9 @@ class AbstractCollectionResource(AbstractResource):
         qb.add_where(await self.interpreter(path[6:]).translate_lookup())
 
     async def add_collect_in_qb(self, qb, path):
+        values: list[str] = path.split('/')
+        if values[1] not in self.attribute_names():
+            raise PathError(message=f"Some attribute in [{values[1]}] does not exist.", code=400)
         colL_predicate: str = await self.interpreter().translate_collect(path, self.protocol_host())
         qb.add_collect(colL_predicate)
 
@@ -166,6 +172,9 @@ class AbstractCollectionResource(AbstractResource):
         qb.add_column(self.predicate_projection(self.normalize_path(path_)))
 
     async def add_group_by_in_qb(self, qb: QueryBuilder, path: str):
+        values: list[str] = path.split('/')
+        if not self.entity_class().has_all_attributes(values[1].split(',')):
+            raise PathError( message=f"Some attribute in [{values[1]}] does not exist.", code=400 )
         qb.add_group_by(await self.predicate_group_by(path))
 
     async def add_count_in_qb(self, qb: QueryBuilder, path: str):

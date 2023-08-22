@@ -5,8 +5,8 @@ from typing import List, Tuple, Optional, Dict
 import geopandas as gpd
 #gpd.read_postgis(sql, con=engine)
 
-#import cartopy.crs as ccrs
-from pyproj import CRS as ccrs
+import cartopy.crs as ccrs
+#from pyproj import CRS as ccrs
 import shapely
 from geopandas import GeoDataFrame
 from shapely.geometry import Point, LineString, Polygon, MultiPolygon, MultiPoint, MultiLineString
@@ -193,7 +193,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
         a_query: str = self.dialect_DB().wkb_query(query)
         extent = await self.get_extent(query)
         rows: list[Row] = await self.dialect_DB().fetch_all_by(a_query)
-        geometries = [shapely.wkb.loads(row.get('st_asbinary')) for row in rows]
+        geometries = [shapely.wkb.loads(row._mapping['st_asbinary']) for row in rows]
         if len(geometries) > 0 and (type(geometries[0]) == MultiPolygon or type(geometries[0]) == Polygon):
             res = await self.polygon_as_figure(geometries, extent)
         elif len(geometries) > 0 and (type(geometries[0]) == LineString or type(geometries[0]) == MultiLineString):
@@ -248,10 +248,13 @@ class FeatureCollectionResource(SpatialCollectionResource):
                                                            order_by=order_by, prefix_col_val=prefix)
         return sanic.response.raw(rows or [], content_type=CONTENT_TYPE_FLATGEOBUFFERS)
 
-    async def get_geobuf_representation(self, list_attribute: List[str] = None, where: Optional[str] = None, order_by: Optional[str] = None, prefix: str = None):
+    async def get_geobuf_representation(self, list_attribute: list[str] | None = None, where: str | None = None, order_by: str | None = None, prefix: str = None):
         #start = time.time()
         #print(f"time: {start} start rows in python")
-        rows = await self.dialect_DB().fetch_all_as_geobuf(list_attribute=list_attribute,where=where, order_by=order_by, prefix_col_val=prefix)
+        #if not self.entity_class().has_all_attributes(list_attribute):
+        #    raise PathError(message=f"Some attributes in {list_attribute} do not exists in the model", code=400)
+
+        rows = await self.dialect_DB().fetch_all_as_geobuf(list_attribute=list_attribute, where=where, order_by=order_by, prefix_col_val=prefix)
         return sanic.response.raw(rows or [], content_type=CONTENT_TYPE_GEOBUF)
         #res = sanic.response.raw(rows or [], content_type=CONTENT_TYPE_GEOBUF)
         #end = time.time()
@@ -289,23 +292,21 @@ class FeatureCollectionResource(SpatialCollectionResource):
         res = sanic.response.raw(rows or [], content_type= CONTENT_TYPE_VECTOR_TILE)
         return res
 
-    async def get_representation_path(self, path: str) -> str:
+    async def get_representation_path(self, path: str):
         try:
-            paths: list[str] = self.normalize_path_as_list( path, '/*/' )
-            qb: SAQueryBuilder = SAQueryBuilder(dialect_db=self.dialect_DB(), entity_class=self.entity_class() )
-
-            for path in paths:
-                await self.execute_qb_function( qb, path )
-            qb.add_table_name( self.dialect_DB().schema_table_name() )
-            return await self.response_by_qb( qb )
+            qb: SAQueryBuilder = SAQueryBuilder(dialect_db=self.dialect_DB(), entity_class=self.entity_class())
+            res = qb.select_statement()
+            print(res)
+            return None
+            return await self.response_qb(qb)
         except PathError as err:
-            return sanic.response.json( err.message, err.code )
+            return sanic.response.json(err.message, err.code)
         except (RuntimeError, TypeError, NameError) as err:
-            return sanic.response.json( "Error {0}".format( err ) )
+            return sanic.response.json("Error {0}".format(err))
 
     async def get_representation_given_path(self, path: str) -> str:
         try:
-            return self.get_representation_path(self, path)
+            #return await self.get_representation_path(path)
 
             paths: list[str] = self.normalize_path_as_list(path, '/*/')
             qb: QueryBuilder = QueryBuilder(dialect_db=self.dialect_DB(), entity_class=self.entity_class())
@@ -426,7 +427,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
         if qb.has_only_one_aggregate_math_function():
             return sanic.response.json(await qb.count())
 
-        if CONTENT_TYPE_HTML in self.accept_type():
+        if CONTENT_TYPE_HTML in self.accept_type() and qb.has_geometry:
             return await self.get_html_representation()
 
         if (CONTENT_TYPE_JSON in self.accept_type()) or (CONTENT_TYPE_GEOJSON in self.accept_type()):

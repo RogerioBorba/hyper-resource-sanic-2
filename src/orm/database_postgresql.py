@@ -5,6 +5,7 @@ import copy
 import time
 
 from sqlalchemy.orm.attributes import InstrumentedAttribute
+from sqlalchemy import Select, select, Double, DOUBLE
 from sqlalchemy import Row
 from .database import DialectDatabase
 from sqlalchemy import text
@@ -83,9 +84,10 @@ class DialectDbPostgresql(DialectDatabase):
     def iterate(self):
         return self.db.iterate
 
-    async def fetch_all_by(self, query: str):
+    async def fetch_all_by(self, query: str | Select):
+        stmt: str | Select = text(query) if isinstance(query, str) else query
         async with self.db.connect() as conn:
-            result = await conn.execute(text(query))
+            result = await conn.execute(stmt)
             rows = result.fetchall()
             return rows
 
@@ -159,9 +161,10 @@ class DialectDbPostgresql(DialectDatabase):
             result = await conn.execute(text(query))
             return result.one_or_none()
 
-    async def fetch_one_by(self, query: str):
+    async def fetch_one_by(self, query: str | Select):
+        stmt: str | Select = text(query) if isinstance(query, str) else query
         async with self.db.connect() as conn:
-            result = await conn.execute(text(query))
+            result = await conn.execute(stmt)
             return result.one_or_none()
 
     def query_build_by(self, enum_fields: str = '', enum_schema_table: str ='', where_predicate: str ='', enum_order_by:str = '', offsetlimit: str = '') -> str:
@@ -410,6 +413,8 @@ class DialectDbPostgresql(DialectDatabase):
              float: dic_math_aggregate_action,
              Float: dic_math_aggregate_action,
              FLOAT: dic_math_aggregate_action,
+             Double: dic_math_aggregate_action,
+             DOUBLE: dic_math_aggregate_action,
              INT: dic_math_aggregate_action,
              Integer: dic_math_aggregate_action,
              INTEGER: dic_math_aggregate_action,

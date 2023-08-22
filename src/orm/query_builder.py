@@ -1,8 +1,24 @@
 from typing import Optional, List
 
-from sqlalchemy import select
+from sqlalchemy import select, Select
 from src.orm.database import DialectDatabase
+from src.orm.models import AlchemyBase
+from src.url_interpreter.interpreter_error import PathError
 from src.url_interpreter.interpreter_new import InterpreterNew
+
+
+def first_word(path: str, separator: str = '/') -> str:
+    """
+    Returns the first word in path (str)
+    Parameters
+    path (str): is a substr from iri.  Ex.: filter/first_name/eq/John
+    Return
+     the first word in path (str)
+    """
+    parts: list [str] = path.split(separator)
+    if len(parts):
+        return path.split(separator)[0].strip().lower()
+    raise PathError(message=f"path is not ok. Path: {path}", code=400)
 
 
 class QueryBuilder:
@@ -169,8 +185,80 @@ class QueryBuilder:
 
 class SAQueryBuilder:
 
-    def __init__(self, dialect_db: DialectDatabase, entity_class: type, prefix_column: Optional[str] = None):
-        self.query: select | None = None
+    def __init__(self, dialect_db: DialectDatabase, entity_class: type[AlchemyBase], path: str, prefix_column: str | None = None):
+        self.select: Select | None = None
+        self.dialect_db = dialect_db
+        self.entity_class = entity_class
+        self.path = path
+        self.paths = self.normalize_path_as_list("/*/")
+        self.prefix_column: str | None = prefix_column
+
+    def offset(self, path: str) -> None:
+        """
+        Add offset in the Select object
+        path (str): is the offset/value1
+        returns None
+        """
+        paths: list[str] = self.normalize_path_as_list(path, '/')
+        offset: str = paths[0]
+        if offset == '' or not paths[1].isnumeric():
+            raise PathError("Error in path. the function offset must have one integer parameter", 400)
+
+    def offsetlimit(self, path: str) -> None:
+        """
+        Add offsetlimit in the Select object
+        path (str): is the offsetlimit/value1&value2
+        returns None
+        """
+        paths: list[str] = self.normalize_path_as_list(path, '/')
+        off_limit: list[str] = paths[1].split('&')
+        if len(off_limit) != 2 or not off_limit[0].isnumeric() or off_limit[1].isnumeric():
+            raise PathError("Error in path. the function offsetlimit must have two integer parameters", 400)
+        self.select = self.select.offset(int(off_limit[0]))
+        self.select = self.select.limit(int(off_limit[1]))
+
+    def dict_function(self) -> dict[str, object]:
+        """"""
+        return {
+            'collect': self.add_collect,
+            'projection': self.add_projection,
+            'count': self.add_count,
+            'orderby': self.add_order,
+            'filter': self.add_where,
+            'offset': self.add_offset,
+            'limit': self.add_limit,
+            'offsetlimit': self.add_offsetlimit,
+        }
+
+    def dict_aggregate_function(self) -> dict:
+        """"""
+        return {
+            'sum': self.add_sum,
+            'avg': self.add_avg,
+            'max': self.add_max,
+            'min': self.add_min,
+            'groupby': self.add_group_by,
+        }
+
+    def dict_all_function(self):
+        """"""
+        return {**self.dict_function(), **self.dict_aggregate_function()}
+
+
+    def normalize_path_as_list(self, path: str, splitter: str = '/*/') -> list[str]:
+        """Returns a list of path separated by splitter
+        Parameters:
+            path (str): a path from outside
+            splitter (str): a separator string.
+        Returns:
+           A list(str).path.
+           Ex.: unidade-federacao-a-list/nome,sigla,geom/*/filter/sigla/in/ES,RJ/*/orderby/sigla
+           ['unidade-federacao-a-list/nome,sigla,geom','filter/sigla/in/ES,RJ', 'orderby/sigla']
+
+        """
+        path_local: str = path if path[0] != '/' else path[1:]
+        paths: list[str] = path_local.split(splitter)
+        return paths if paths[-1] != '' else paths[:-1]
 
     def column_name(self, attribute_name: str) -> str:
         return self.entity_class.column_name(attribute_name)
@@ -307,6 +395,42 @@ class SAQueryBuilder:
             return row._mapping['st_asflatgeobuf']
         None
 
-    def interpreter(self, path: str = ''):
-        return InterpreterNew(path, self.entity_class, self.dialect_db)
+    def get_function_names(self) -> list[str]:
+        """Returns a list of function names"""
+        if self.function_names is None:
+            collection_func: List[str] = super(FeatureCollectionResource, self).get_function_names()
+            self.function_names = collection_func + self.dialect_DB().get_spatial_function_names() + list(self.dict_function().keys())
+        return self.function_names
 
+    def attribute_names(self) -> list[str]:
+        """
+        Returns a list of attribute names
+        Returns list(str)
+
+        """
+        return self.entity_class.all_attributes_with_dereferenceable()
+
+    def operation_name_in_path(self, path: str) -> str:
+        operation_name_or_attribute_comma: str = first_word(path)
+        if ',' in operation_name_or_attribute_comma or operation_name_or_attribute_comma in self.attribute_names():
+            return 'projection'
+        if operation_name_or_attribute_comma in self.get_function_names():
+            return operation_name_or_attribute_comma
+        msg = f"This {path} is incorrect"
+        print(msg)
+        raise PathError(msg, 400)
+
+    def get_function_name_in_dict(self) -> str | None:
+        """Returns the name of the correspondent function in the paths if exists, otherwise None.
+        paths should like
+        Returns
+        function_name (str) or None """
+        d = self.dict_all_function()
+        for path in self.paths:
+            func_name: str = self.operation_name_in_path(path)
+            if func_name in d:
+                return func_name
+        return None
+    def statement(self) -> Select:
+        for path in self.paths:
+            pass
