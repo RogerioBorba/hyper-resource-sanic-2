@@ -21,7 +21,13 @@ class Expression:
         self._matches: Optional[List[Match]] = None
         self._twords: Optional[List[TWord]] = None
 
-    def matches(self) -> List[Match]:
+    def matches(self) -> list[Match]:
+        """
+        Returns a list of matches, i.e. positions of strings starting with /(/ and ending with /)/
+
+        Returns
+            list(str)
+        """
         if self._matches is None:
             pattern = re.compile(r'(/\(/)|(/\)/)', re.UNICODE)
             self._matches = [match for match in pattern.finditer(self.string)]

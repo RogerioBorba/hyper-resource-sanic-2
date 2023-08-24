@@ -8,7 +8,7 @@ from src.hyper_resource.abstract_resource import AbstractResource, MIME_TYPE_JSO
 from src.hyper_resource.context.abstract_context import AbstractCollectionContext
 from src.hyper_resource.common_resource import CONTENT_TYPE_HTML, CONTENT_TYPE_JSON, CONTENT_TYPE_XML, dict_to_xml
 from ..orm.action_type import ActionFunction
-from ..orm.query_builder import QueryBuilder
+from ..orm.query_builder import QueryBuilder, SASQLBuilder
 from ..url_interpreter.interpreter import Interpreter
 from ..url_interpreter.interpreter_error import PathError
 from ..url_interpreter.interpreter_new import InterpreterNew
@@ -232,8 +232,22 @@ class AbstractCollectionResource(AbstractResource):
             raise PathError(msg, 400)
         return await qb_function[operation_name](*[qb, path])
 
+
+    async def get_representation_path(self, path: str):
+        try:
+            qb: SASQLBuilder = SASQLBuilder(resource=self, path=path, delimiter='/*/')
+            res = qb.select_statement()
+            print(res)
+            return None
+            return await self.response_qb(qb)
+        except PathError as err:
+            return sanic.response.json(err.message, err.code)
+        except (RuntimeError, TypeError, NameError) as err:
+            return sanic.response.json("Error {0}".format(err))
+
     async def get_representation_given_path(self, path: str) -> str:
         try:
+            return await self.get_representation_path(path)
             paths: list[str] = self.normalize_path_as_list(path, '/*/')
             qb: QueryBuilder = QueryBuilder(dialect_db=self.dialect_DB(), entity_class=self.entity_class())
             qb.has_geometry = False

@@ -25,7 +25,7 @@ from src.orm.database_postgis import DialectDbPostgis
 import json, os
 
 from src.orm.dictionary_actions_abstract_collection import action_name
-from src.orm.query_builder import QueryBuilder, SAQueryBuilder
+from src.orm.query_builder import QueryBuilder, SASQLBuilder
 from src.url_interpreter.interpreter import Interpreter
 from src.url_interpreter.interpreter_error import PathError
 from src.url_interpreter.interpreter_new import InterpreterNew
@@ -294,7 +294,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
 
     async def get_representation_path(self, path: str):
         try:
-            qb: SAQueryBuilder = SAQueryBuilder(dialect_db=self.dialect_DB(), entity_class=self.entity_class())
+            qb: SASQLBuilder = SASQLBuilder(resource=self, path=path, delimiter='/*/')
             res = qb.select_statement()
             print(res)
             return None
@@ -306,7 +306,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
 
     async def get_representation_given_path(self, path: str) -> str:
         try:
-            #return await self.get_representation_path(path)
+            return await self.get_representation_path(path)
 
             paths: list[str] = self.normalize_path_as_list(path, '/*/')
             qb: QueryBuilder = QueryBuilder(dialect_db=self.dialect_DB(), entity_class=self.entity_class())

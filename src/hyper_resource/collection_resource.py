@@ -12,10 +12,9 @@ from ..url_interpreter.interpreter_new import InterpreterNew
 from ..orm.dictionary_actions_abstract_collection import dic_abstract_collection_action, action_name
 
 class CollectionResource(AbstractCollectionResource):
-    def __init__(self, request):
-        super().__init__(request)
+    def __init__(self, request: sanic.request.Request, context_class: type, function_names: list[str]):
+        super().__init__(request, context_class, function_names)
         self.context_class = AbstractCollectionContext
-        self.function_names = None
 
     def get_function_names(self) -> List[str]:
         if self.function_names is None:

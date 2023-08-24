@@ -1,4 +1,4 @@
-#(hyper-resource-sanic-JWRMp1xC-py3.7) C:\desenv\python-des\hyper-resource-sanic\tests>pytest -q test_filter_expression.py
+#(hyper_resource-sanic-JWRMp1xC-py3.7) C:\desenv\python-des\hyper_resource-sanic\tests>pytest -q test_filter_expression.py
 
 from typing import Dict, Tuple, Sequence, List
 import unittest
