@@ -143,6 +143,7 @@ class DialectDbPostgresql(DialectDatabase):
             alias = self.alias_column(att, prefix_col_val)
             if alias is not None:
                 list_alias.append(alias)
+
         return ','.join(list_alias)
 
     def enum_column_names_alias_attribute_given(self, attributes: List[InstrumentedAttribute], prefix_col_val: str = None) -> str:
@@ -210,8 +211,8 @@ class DialectDbPostgresql(DialectDatabase):
         query = self.basic_select_by_id(pk, tuple_attrib, prefix_col_val)
         sql = f"select {self.function_db()}(t.*) from ({query}) as t;"
         print(sql)
-        rows = await self.fetch_one_by(sql)
-        return rows if rows is None else rows[self.function_db()]
+        row: Row = await self.fetch_one_by(sql)
+        return None if row is None else row[0]
 
     async def fetch_all_model(self, tuple_attrib : Tuple[str] = None, prefix_col_val: str=None):
         query = self.basic_select(tuple_attrib, prefix_col_val)

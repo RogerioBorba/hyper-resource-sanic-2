@@ -52,7 +52,7 @@ class AlchemyBase(Base):
     @classmethod
     def is_relationship_fk_attribute(cls, attribute: InstrumentedAttribute) -> bool:
 
-        return cls.is_relationship_attribute(attribute) and hasattr(attribute, 'foreign_keys') and len(attribute.foreign_keys) > 0
+        return cls.is_relationship_attribute(attribute) and hasattr(attribute.property,"_user_defined_foreign_keys") and attribute.property._user_defined_foreign_keys is not None
 
     @classmethod
     def column_name_or_None(cls, inst_attr: InstrumentedAttribute):
