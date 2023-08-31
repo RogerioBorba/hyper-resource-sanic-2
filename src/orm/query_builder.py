@@ -1,6 +1,7 @@
 from typing import Optional, List
 
-from sqlalchemy import select, Select
+from sqlalchemy import Select, text, Column, case
+from sqlalchemy.orm import InstrumentedAttribute
 
 from src.hyper_resource.abstract_resource import AbstractResource
 from src.orm.database import DialectDatabase
@@ -17,10 +18,30 @@ def first_word(path: str, separator: str = '/') -> str:
     Return
      the first word in path (str)
     """
-    parts: list [str] = path.split(separator)
+    parts: list[str] = path.split(separator)
     if len(parts):
         return path.split(separator)[0].strip().lower()
     raise PathError(message=f"path is not ok. Path: {path}", code=400)
+
+
+def normalize_path_as_list(path: str, splitter: str = '/*/') -> list[str]:
+    """Returns a list of path separated by splitter
+    Parameters:
+        path (str): a path from outside
+        splitter (str): a separator string.
+    Returns:
+       A list(str) of path.
+       Ex.: unidade-federacao-a-list/nome,sigla,geom/*/filter/sigla/in/ES,RJ/*/orderby/sigla
+       ['unidade-federacao-a-list/nome,sigla,geom','filter/sigla/in/ES,RJ', 'orderby/sigla']
+
+    """
+    print("---------------------------------------------------------------------")
+    print(path)
+    if len(path) == 0:
+        return path
+    path_local: str = path if path[0] != '/' else path[1:]
+    paths: list[str] = path_local.split(splitter)
+    return paths if paths[-1] != '' else paths[:-1]
 
 
 class QueryBuilder:
@@ -187,36 +208,14 @@ class QueryBuilder:
 
 class SASQLBuilder:
 
-    def __init__(self, resource: AbstractResource, path: str, prefix_column: str | None = None, delimiter: str='/*/'):
+    def __init__(self, resource: AbstractResource, path: str, prefix_column: str | None = None, delimiter: str = '/*/'):
         self.select: Select | None = None
         self.resource = resource
         self.path = path
-        self.paths = self.normalize_path_as_list(path=path, splitter=delimiter)
+        self.paths = normalize_path_as_list(path=path, splitter=delimiter)
         self.prefix_column: str | None = prefix_column
-
-    def offset(self, path: str) -> None:
-        """
-        Add offset in the Select object
-        path (str): is the offset/value1
-        returns None
-        """
-        paths: list[str] = self.normalize_path_as_list(path, '/')
-        offset: str = paths[0]
-        if offset == '' or not paths[1].isnumeric():
-            raise PathError("Error in path. the function offset must have one integer parameter", 400)
-
-    def offsetlimit(self, path: str) -> None:
-        """
-        Add offsetlimit in the Select object
-        path (str): is the offsetlimit/value1&value2
-        returns None
-        """
-        paths: list[str] = self.normalize_path_as_list(path, '/')
-        off_limit: list[str] = paths[1].split('&')
-        if len(off_limit) != 2 or not off_limit[0].isnumeric() or off_limit[1].isnumeric():
-            raise PathError("Error in path. the function offsetlimit must have two integer parameters", 400)
-        self.select = self.select.offset(int(off_limit[0]))
-        self.select = self.select.limit(int(off_limit[1]))
+        self.function_names = None
+        self.projection: list[str] = self.attribute_names()
 
     def dict_function(self) -> dict[str, object]:
         """"""
@@ -224,11 +223,11 @@ class SASQLBuilder:
             'collect': self.add_collect,
             'projection': self.add_projection,
             'count': self.add_count,
-            'orderby': self.add_order,
+            'orderby': self.add_order_by,
             'filter': self.add_where,
             'offset': self.add_offset,
             'limit': self.add_limit,
-            'offsetlimit': self.add_offsetlimit,
+            'offsetlimit': self.add_offset_limit,
         }
 
     def dict_aggregate_function(self) -> dict:
@@ -245,25 +244,97 @@ class SASQLBuilder:
         """"""
         return {**self.dict_function(), **self.dict_aggregate_function()}
 
-
-    def normalize_path_as_list(self, path: str, splitter: str = '/*/') -> list[str]:
-        """Returns a list of path separated by splitter
-        Parameters:
-            path (str): a path from outside
-            splitter (str): a separator string.
-        Returns:
-           A list(str).path.
-           Ex.: unidade-federacao-a-list/nome,sigla,geom/*/filter/sigla/in/ES,RJ/*/orderby/sigla
-           ['unidade-federacao-a-list/nome,sigla,geom','filter/sigla/in/ES,RJ', 'orderby/sigla']
-
+    def interpreter(self, path: str) -> InterpreterNew:
         """
-        path_local: str = path if path[0] != '/' else path[1:]
-        paths: list[str] = path_local.split(splitter)
-        return paths if paths[-1] != '' else paths[:-1]
+        Returns an instance of InterpreterNew to generate sql expression
+
+        Parameters
+            path(str) - path to be interpreted and converted to sql expression
+
+        Returns
+                interpreter(InterpreterNew)
+        """
+        dialect_db: DialectDatabase = self.resource.dialect_DB()
+        entity_class: type[AlchemyBase] = self.resource.entity_class()
+        return InterpreterNew(an_expression=path, model_class=entity_class, dialect_db=dialect_db)
+
+    def get_select(self) -> Select:
+        if self.select is None:
+            self.select = Select(*self.columns_alias()).select_from(self.resource.metadata_table())
+        return self.select
+
+    async def add_where(self, path: str) -> None:
+        """translate path in a sql expression (predicate) to add in Select object.
+           Example: path = filter/valor/gt/100 will render an expression valor > 100 to be appended in Select object
+
+            Paramaters
+                path (str) - is a string containing an external expression, such as filter/valor/gt/100, i.e,
+                operation name and rest of the string.
+
+
+            Returns
+                None
+        """
+        path_without_operation_name: str = "/".join(path.split("/")[1:])
+        expr: str = await self.interpreter(path_without_operation_name).translate_lookup()
+        self.select = self.get_select().where(text(expr))
+
+    def add_collect(self, path: str) -> None:
+        pass
+
+    def all_external_attributes_exists(self, ext_attr_names: set[str]) -> bool:
+        """Returns True if all external attribute in the ext_attr_names exists as attribute name in the model class
+        Parameters
+            ext_attr_names (set[str]) - is a set of external attribute names coming from path
+        Returns a (bool)
+        """
+        set_attr_names = set(self.attribute_names())
+        return set_attr_names.union(ext_attr_names) == set_attr_names
+
+    async def add_projection(self, path: str) -> None:
+        ext_attr_names: set[str] = {att_name.strip() for att_name in path.lower().split(',')}
+        if self.all_external_attributes_exists(ext_attr_names):
+            self.projection = list(ext_attr_names)
+        else:
+            dif: set[str] = ext_attr_names.difference(self.attribute_names())
+            raise PathError(f"Error in {dif}", code=400)
+
+    def add_order_by(self, path: str) -> None:
+        pass
+
+    def add_count(self, path: str) -> None:
+        pass
+
+    def add_group_by(self, path: str) -> None:
+        pass
+
+    def add_offset(self, path: str) -> None:
+        pass
+
+    def add_limit(self, path: str) -> None:
+        pass
+
+    def add_offset_limit(self, path: str) -> None:
+        pass
+
+    def add_sum(self, path: str) -> None:
+        pass
+
+    def add_avg(self, path: str) -> None:
+        pass
+
+    def add_max(self, path: str) -> None:
+        pass
+
+    def add_min(self, path: str) -> None:
+        pass
+
+    def dialect_db(self) -> DialectDatabase:
+        return self.resource.dialect_db
 
     async def fetch_all_as_geobuf(self):
-        a_query: str = self.dialect_db.geobuf_query(self.query())
-        rows = await self.dialect_db.fetch_all_by(a_query)
+        a_query: str = self.dialect_db().geobuf_query(self.query())
+        rows = await self.dialect_db().fetch_all_by(a_query)
         if rows:
             row = rows[0]
             return row._mapping['st_asgeobuf']
@@ -277,12 +348,33 @@ class SASQLBuilder:
             return row._mapping['st_asflatgeobuf']
         None
 
+    async def execute_operation(self,  path: str) -> None:
+        """Executes the operation in path to add statement in Select object
+
+        Paramaters
+            path (str) - is a string containing an expression, i.e, operation name and rest of the string.
+            Example: filter/valor/gt/100, where filter is the operation name to be executed to be appended in Select object
+
+        Returns
+            None
+        """
+        operation_name: str = self.operation_name_in_path(path)
+        if operation_name not in self.dict_all_function().keys():
+            msg: str = f"Error in path. This {operation_name} does not exists"
+            raise PathError(msg, 400)
+        return await self.dict_all_function()[operation_name](*[path])
+
     def get_function_names(self) -> list[str]:
-        """Returns a list of function names"""
+        """Returns a list of function names. Each type of resource has different functions
+            Returns
+                list(str) - list function names
+        """
         if self.function_names is None:
-            collection_func: List[str] = resource.get_function_names()
-            self.function_names = collection_func + self.dialect_DB().get_spatial_function_names() + list(self.dict_function().keys())
+            self.function_names = self.resource.get_function_names()
         return self.function_names
+
+    def entity_class(self) -> type[AlchemyBase]:
+        return self.resource.entity_class()
 
     def attribute_names(self) -> list[str]:
         """
@@ -290,7 +382,8 @@ class SASQLBuilder:
         Returns list(str)
 
         """
-        return self.entity_class.all_attributes_with_dereferenceable()
+        return [name for name, attrib in self.entity_class().attributes_with_dereferenceable()]
+
 
     def operation_name_in_path(self, path: str) -> str:
         operation_name_or_attribute_comma: str = first_word(path)
@@ -313,6 +406,44 @@ class SASQLBuilder:
             if func_name in d:
                 return func_name
         return None
-    def select_statement(self) -> Select:
+
+    async def select_statement(self) -> Select:
+        """Returns a Select object from paths
+        Returns
+        (Select)"""
+
         for path in self.paths:
-            print(path)
+            await self.execute_operation(path)
+        self.select = self.get_select()
+        return self.get_select()
+
+    def alias_column(self, inst_attr: InstrumentedAttribute) -> object:
+        if self.entity_class().is_relationship_fk_attribute(inst_attr) and self.prefix_column is not None:
+            col = self.entity_class().column(inst_attr)
+            model_class = self.entity_class().class_given_relationship_fk(inst_attr)
+            prefix_model: str = f"{self.prefix_column}{model_class.router_list()}/"
+            a_case = case((inst_attr is not None, col._rconcat(prefix_model)), else_=None).label(f"{self.entity_class().attribute_name_given(inst_attr)}")
+            return a_case
+            #return f"CASE WHEN {col_name} is not null THEN '{self.prefix_col}{model_class.router_list()}/' || {col_name} ELSE null  END AS {self.entity_class.attribute_name_given(inst_attr)}"
+        elif self.entity_class().is_primary_key(inst_attr):
+            pref = f'{self.prefix_column}{self.entity_class().router_list()}/' if self.prefix_column is not None else ''
+            col = self.entity_class().column(inst_attr)
+            attr_name = self.entity_class().attribute_name_given(inst_attr)
+            return col._rconcat(pref).label(attr_name) if self.prefix_column is not None else col.label(attr_name)
+        elif self.entity_class().is_relationship_attribute(inst_attr):
+            return None
+        else:
+            col = self.entity_class().column(inst_attr)
+            attr_name = self.entity_class().attribute_name_given(inst_attr)
+            return col.label(attr_name)
+        #c = case((Gasto.valor > 1000, Gasto.valor * 20), else_=Gasto.valor)
+
+    def columns_alias(self) -> list:
+        attr_names = self.projection
+        attributes = [self.entity_class().__dict__[name] for name in attr_names if name in self.entity_class().__dict__.keys()]
+        list_col = []
+        for att in attributes:
+            col: Column | None = self.alias_column(att)
+            if col is not None:
+                list_col.append(col)
+        return list_col

@@ -52,7 +52,7 @@ class AbstractResource:
     def protocol_host(self):
         return self.request.scheme + '://' + self.request.host
 
-    def entity_class(self) -> AlchemyBase:
+    def entity_class(self) -> type[AlchemyBase]:
         raise NotImplementedError("'entity_class' must be implemented in subclasses")
 
     def metadata_table(self):
@@ -107,6 +107,14 @@ class AbstractResource:
     async def delete(self, id):
         return response.json("Method DELETE not implemented yet.", status=501)
 
+    def get_function_names(self) -> list[str]:
+        """
+        Returns a list of function name that a resource should respond to.
+
+        Return
+            function names (list[str])
+        """
+        raise NotImplementedError("'get_function_names' must be implemented in subclasses")
     def validate_attribute_names(self, attribute_names: List[str]) -> bool:
         s1 = set(self.dialect_DB().attribute_names())
         s2 = set(attribute_names)

@@ -1,7 +1,7 @@
 # from __future__ import annotations
 from typing import Dict, Tuple, Sequence, List, Any, Optional
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, Column
 from sqlalchemy.orm import ColumnProperty, RelationshipProperty
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
@@ -55,12 +55,25 @@ class AlchemyBase(Base):
         return cls.is_relationship_attribute(attribute) and hasattr(attribute.property,"_user_defined_foreign_keys") and attribute.property._user_defined_foreign_keys is not None
 
     @classmethod
-    def column_name_or_None(cls, inst_attr: InstrumentedAttribute):
+    def column(cls, inst_attr: InstrumentedAttribute) -> Column | None:
+        """Returns the column associated to attribute in mapping class. Note that composite will return None
+        Return
+        Column | None"""
+
+        if isinstance(inst_attr.prop, ColumnProperty):
+            return inst_attr.prop.columns[0]
+        elif isinstance(inst_attr.prop, RelationshipProperty) and hasattr(inst_attr.prop, "_user_defined_foreign_keys") and len(inst_attr.prop._user_defined_foreign_keys):
+            return list(inst_attr.prop._user_defined_foreign_keys)[0]
+        return None
+
+    @classmethod
+    def column_name_or_none(cls, inst_attr: InstrumentedAttribute) -> str | None:
         if isinstance(inst_attr.prop, ColumnProperty):
             return inst_attr.prop.columns[0].name
         elif isinstance(inst_attr.prop, RelationshipProperty) and list(inst_attr.prop._user_defined_foreign_keys)[0] is not None:
             return list(inst_attr.prop._user_defined_foreign_keys)[0].name
         return None
+
     @classmethod
     def class_given_relationship_fk(cls, inst_attr: InstrumentedAttribute):
         return inst_attr.prop.entity.class_
@@ -202,7 +215,7 @@ class AlchemyBase(Base):
     @classmethod
     def column_name(cls, attribute_name: str) -> str:
         attribute = cls.__dict__[attribute_name]
-        return cls.column_name_or_None(attribute)
+        return cls.column_name_or_none(attribute)
 
     @classmethod
     def column_names_given_attributes(cls, attributes_from_path: List[str]) -> List[str]:

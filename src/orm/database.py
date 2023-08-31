@@ -1,32 +1,26 @@
 import datetime
-import json
 from datetime import datetime, date
 from numbers import Number
 from typing import List, Tuple, Optional, Any, Dict
-
-from src.hyper_resource.util import value_has_url, a_request
+from sqlalchemy.ext.asyncio import AsyncEngine
 from src.orm.converter import ConverterType
 from geoalchemy2 import Geometry
 from shapely.geometry import Polygon, LineString, MultiPolygon, MultiLineString, MultiPoint
 from shapely.geometry.base import BaseGeometry
-from sqlalchemy import Column, ForeignKey, Integer, SmallInteger, String, Float, Numeric
-from sqlalchemy.inspection import inspect
+from sqlalchemy import Column, ForeignKey, Integer, SmallInteger, String, Float, Numeric, Table, Engine
 from sqlalchemy.orm.attributes import InstrumentedAttribute
-from sqlalchemy.orm import sessionmaker
-
 from src.orm.dictionary_actions import ActionFunction
-from src.orm.models import AlchemyBase, Base, Point
-
+from src.orm.models import Base, Point
 from src.orm.models import AlchemyBase
 
 
-class AbstractDialectDatabase():
-    def __init__(self, db):
+class AbstractDialectDatabase:
+    def __init__(self, db: Engine | AsyncEngine):
         self.db = db
 
 
 class DialectDatabase(AbstractDialectDatabase):
-    def __init__(self, db, metadata_table=None, entity_class: AlchemyBase = None):
+    def __init__(self, db: Engine | AsyncEngine, metadata_table: Table | None = None, entity_class: type[AlchemyBase] | None = None):
         super().__init__(db)
         self.metadata_table = metadata_table if metadata_table is not None else entity_class.__table__
         self.entity_class = entity_class
@@ -41,15 +35,18 @@ class DialectDatabase(AbstractDialectDatabase):
         # return self.metadata_table.primary_key.columns[0].name
         return list(self.metadata_table.primary_key.columns)[0].name
 
-    def foreign_keys_columns(self):
-        attrs = [attribute for attribute in list(self.entity_class.__table__.c) if isinstance(attribute, Column)]
-        fk_columns = [att for att in attrs if len(att.foreign_keys) > 0]
-        return fk_columns
+    def foreign_keys_columns(self) -> list[Column]:
+        """Return a list of foreign keys
+        Return
+        list[Column]
+        """
+        return [column for name, column in self.metadata_table.c.items()
+                if isinstance(column, Column) and len(column.foreign_keys)]
 
     def foreign_key_column_by_name(self, column_name: str):
         fk_columns = self.foreign_keys_columns()
         col = [column for column in fk_columns if column.key == column_name]
-        if (len(col) == 0):
+        if len(col) == 0:
             raise NameError(f"The attribute is not existent or does not represent a foreign key: {column_name}")
         else:
             return col[0]

@@ -4,8 +4,9 @@ from typing import List, Tuple, Optional, Any, Dict
 import copy
 import time
 
+from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm.attributes import InstrumentedAttribute
-from sqlalchemy import Select, select, Double, DOUBLE
+from sqlalchemy import Select, select, Double, DOUBLE, case, Engine, Table
 from sqlalchemy import Row
 from .database import DialectDatabase
 from sqlalchemy import text
@@ -66,7 +67,7 @@ SQLALCHEMY_TYPES_SQL_OPERATIONS = {
 }
 
 class DialectDbPostgresql(DialectDatabase):
-    def __init__(self, db, metadata_table, entity_class):
+    def __init__(self, db: Engine | AsyncEngine, metadata_table: Table | None = None, entity_class: type[AlchemyBase] | None = None):
         super().__init__(db, metadata_table, entity_class)
 
     async def offset_limit(self, offset: int, limit: int, orderby= None, asc=None, format_row = None ):
@@ -110,49 +111,53 @@ class DialectDbPostgresql(DialectDatabase):
         row = await self.db.fetch_one(f"select nextval('{sequence}')")
         return row['nextval']
 
+    def alias_column_new(self, inst_attr: InstrumentedAttribute, prefix_col: str | None = None):
+        col: Column | None = self.entity_class.column(inst_attr)
+        if col is None:
+            return None
+        col_name: str = col.name
+        attr_name = self.entity_class.attribute_name_given(inst_attr)
+        if self.entity_class.is_relationship_fk_attribute(inst_attr) and prefix_col is not None:
+            model_class = self.entity_class.class_given_relationship_fk(inst_attr)
+            a_case = case((col is not None, f"{prefix_col}{model_class.router_list()}/' || {col_name}"))
+            a_case.label(self.entity_class.attribute_name_given(inst_attr))
+            return a_case
+        elif self.entity_class.is_primary_key(inst_attr):
+            pref = f'{prefix_col}{self.entity_class.router_list()}/' if prefix_col is not None else ''
+            alias: str = col.name if pref == '' else f"'{pref}' || {col_name} as {attr_name}"
+            col.label(alias)
+        elif self.entity_class.is_relationship_attribute(inst_attr):
+            return None
+        else:
+            col.label(attr_name)
+        return col
+
     def alias_column(self, inst_attr: InstrumentedAttribute, prefix_col: str = None):
-        if self.entity_class.is_relationship_fk_attribute(inst_attr)  and prefix_col is not None:
-            col_name = self.entity_class.column_name_or_None(inst_attr) #inst_attr.prop._user_defined_foreign_keys[0].name
+        if self.entity_class.is_relationship_fk_attribute(inst_attr) and prefix_col is not None:
+            col_name = self.entity_class.column_name_or_none(inst_attr) #inst_attr.prop._user_defined_foreign_keys[0].name
             model_class = self.entity_class.class_given_relationship_fk(inst_attr)
             return f"CASE WHEN {col_name} is not null THEN '{prefix_col}{model_class.router_list()}/' || {col_name} ELSE null  END AS {self.entity_class.attribute_name_given(inst_attr)}"
         elif self.entity_class.is_primary_key(inst_attr):
             pref = f'{prefix_col}{self.entity_class.router_list()}/' if prefix_col is not None  else ''
-            col_name = self.entity_class.column_name_or_None(inst_attr)
+            col_name = self.entity_class.column_name_or_none(inst_attr)
             attr_name = self.entity_class.attribute_name_given(inst_attr)
             return f"{col_name} as {attr_name}" if pref == '' else f"'{pref}' || {col_name} as {attr_name}"
         elif self.entity_class.is_relationship_attribute(inst_attr):
             return None
-            """
-            col_name = self.entity_class.fk_or_none_n_relationship_given(
-                inst_attr.key)  
-            if not col_name:
-                return None
-            model_class = self.entity_class.class_given_relationship_fk(self.entity_class.__dict__[inst_attr.key])
-            return f"CASE WHEN {col_name} is not null THEN '{prefix_col}{model_class.router_list()}/' || {col_name} ELSE null  END AS {self.entity_class.attribute_name_given(inst_attr)}
-            """
         else:
-            col_name = self.entity_class.column_name_or_None(inst_attr)
+            col_name = self.entity_class.column_name_or_none(inst_attr)
             attr_name = self.entity_class.attribute_name_given(inst_attr)
             return f'{col_name} as {attr_name}'
 
-    def column_names_alias(self, attrib_names: Optional[List[str]] = None, prefix_col_val: str = None) -> str:
+    def column_names_alias(self, attrib_names: list[str] | None = None, prefix_col_val: str = None) -> str:
         attr_names = attrib_names if attrib_names is not None else self.attribute_names()
         attributes = [self.entity_class.__dict__[name] for name in attr_names]
-        list_alias = []
+        list_col = []
         for att in attributes:
-            alias = self.alias_column(att, prefix_col_val)
-            if alias is not None:
-                list_alias.append(alias)
-
-        return ','.join(list_alias)
-
-    def enum_column_names_alias_attribute_given(self, attributes: List[InstrumentedAttribute], prefix_col_val: str = None) -> str:
-        list_alias = []
-        for att in attributes:
-            alias = self.alias_column(att, prefix_col_val)
-            if alias is not None:
-                list_alias.append(alias)
-        return ','.join(list_alias)
+            col: Column | None = self.alias_column(att, prefix_col_val)
+            if col is not None:
+                list_col.append(col)
+        return ','.join(list_col)
 
     async def fetch_one(self, dic: dict, all_column: str = None, prefix_col_val: str = None):
         key_or_unique = next(key for key in dic.keys())
@@ -177,10 +182,8 @@ class DialectDbPostgresql(DialectDatabase):
         return f'select {predicate_field} from {predicate_schema_table} {predicate_join} {predicate_orderby} {predicate_offset}'
 
     def basic_select(self, list_attrib: List[str] = None, prefix_col_val: str = None ) -> str:
-
-        enum_col_names = self.column_names_alias(list_attrib, prefix_col_val)
-        query = f'select {enum_col_names} from {self.schema_table_name()}'
-        return query
+        enum_col_names: str = self.column_names_alias(list_attrib, prefix_col_val)
+        return f'select {enum_col_names} from {self.schema_table_name()}'
 
     def basic_select_one_by_key_value(self, key_value: Tuple, tuple_attrib: Tuple[str] = None, prefix_col_val: str=None):
         tp_attribute = self.db_type_name_given_attribute(key_value[0])
@@ -207,10 +210,9 @@ class DialectDbPostgresql(DialectDatabase):
     def function_db(self) -> str:
         return 'row_to_json'
 
-    async def fetch_one_as_json(self, pk, tuple_attrib : Tuple[str] = None,prefix_col_val: str=None):
+    async def fetch_one_as_json(self, pk, tuple_attrib: tuple[str] | None = None, prefix_col_val: str | None = None):
         query = self.basic_select_by_id(pk, tuple_attrib, prefix_col_val)
         sql = f"select {self.function_db()}(t.*) from ({query}) as t;"
-        print(sql)
         row: Row = await self.fetch_one_by(sql)
         return None if row is None else row[0]
 

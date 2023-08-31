@@ -59,12 +59,9 @@ class AbstractCollectionResource(AbstractResource):
 
         start = time.time()
         print(f"time: {start} start rows in python")
-
-        rows = await self.dialect_DB().fetch_all()
+        rows = await self.dialect_DB().fetch_all(prefix=self.protocol_host())
         rows_from_db = await self.rows_as_dict(rows)
         res = sanic.response.json(rows_from_db or [])
-        #rows = await self.dialect_DB().fetch_all_as_json(prefix_col_val=self.protocol_host())
-        #res = sanic.response.text(rows or [], content_type=CONTENT_TYPE_JSON)
         end = time.time()
         print(f"time: {end - start} end rows in python")
         return res
@@ -235,11 +232,10 @@ class AbstractCollectionResource(AbstractResource):
 
     async def get_representation_path(self, path: str):
         try:
-            qb: SASQLBuilder = SASQLBuilder(resource=self, path=path, delimiter='/*/')
-            res = qb.select_statement()
-            print(res)
-            return None
-            return await self.response_qb(qb)
+            qb: SASQLBuilder = SASQLBuilder(resource=self, path=path, delimiter='/*/', prefix_column=self.protocol_host())
+            res = await qb.select_statement()
+            rows = await self.dialect_DB().fetch_all_by(res)
+            return await self.response_given(rows)
         except PathError as err:
             return sanic.response.json(err.message, err.code)
         except (RuntimeError, TypeError, NameError) as err:

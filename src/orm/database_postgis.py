@@ -165,22 +165,22 @@ class DialectDbPostgis(DialectDbPostgresql):
 
     def alias_column_old(self, inst_attr: InstrumentedAttribute, prefix_col: str = None):
         if self.entity_class.is_relationship_fk_attribute(inst_attr)  and prefix_col is not None:
-            col_name = self.entity_class.column_name_or_None(inst_attr) #inst_attr.prop._user_defined_foreign_keys[0].name
+            col_name = self.entity_class.column_name_or_none(inst_attr) #inst_attr.prop._user_defined_foreign_keys[0].name
             model_class = self.entity_class.class_given_relationship_fk(inst_attr)
             return f"CASE WHEN {col_name} is not null THEN '{prefix_col}{model_class.router_list()}/' || {col_name} ELSE null  END AS {self.entity_class.attribute_name_given(inst_attr)}"
         elif self.entity_class.is_primary_key(inst_attr):
             pref = f'{prefix_col}{self.entity_class.router_list()}/' if prefix_col is not None  else ''
-            col_name = self.entity_class.column_name_or_None(inst_attr)
+            col_name = self.entity_class.column_name_or_none(inst_attr)
             attr_name = self.entity_class.attribute_name_given(inst_attr)
             return f"'{pref}' || {col_name} as {attr_name}"
         elif self.entity_class.is_relationship_attribute(inst_attr):
             return None
         elif self.entity_class.is_geometry_attribute(inst_attr):
-            col_name = self.entity_class.column_name_or_None(inst_attr)
+            col_name = self.entity_class.column_name_or_none(inst_attr)
             attr_name = self.entity_class.attribute_name_given(inst_attr)
             return f"ST_AsEWKB({col_name}) as {attr_name}"
         else:
-            col_name = self.entity_class.column_name_or_None(inst_attr)
+            col_name = self.entity_class.column_name_or_none(inst_attr)
             attr_name = self.entity_class.attribute_name_given(inst_attr)
             return f'{col_name} as {attr_name}'
 

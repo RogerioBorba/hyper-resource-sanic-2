@@ -108,7 +108,7 @@ def path_as_list(path: str) -> List[str]:
 
 
 class InterpreterNew:
-    def __init__(self, an_expression: str, model_class: AlchemyBase, dialect_db: DialectDatabase):
+    def __init__(self, an_expression: str, model_class: type[AlchemyBase], dialect_db: DialectDatabase):
         self.expression: Expression = Expression(an_expression)
         self.model_class = model_class
         self.state_machine = StateMachineNew()
