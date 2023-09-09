@@ -2,36 +2,28 @@ import io
 import matplotlib.pyplot as plt
 import time
 from typing import List, Tuple, Optional, Dict
-import geopandas as gpd
-#gpd.read_postgis(sql, con=engine)
-
 import cartopy.crs as ccrs
-#from pyproj import CRS as ccrs
 import shapely
-from geopandas import GeoDataFrame
 from shapely.geometry import Point, LineString, Polygon, MultiPolygon, MultiPoint, MultiLineString
-from geoalchemy2 import Geometry, shape
+from geoalchemy2 import Geometry
 from shapely import wkb
 from sqlalchemy import Row
-from settings import BASE_DIR, SOURCE_DIR
+from settings import SOURCE_DIR
 import sanic
-
 from src.hyper_resource.common_resource import CONTENT_TYPE_HTML, CONTENT_TYPE_OCTET_STREAM, CONTENT_TYPE_GEOBUF, \
-    CONTENT_TYPE_WKB, CONTENT_TYPE_VECTOR_TILE, CONTENT_TYPE_JSON, CONTENT_TYPE_GEOJSON, CONTENT_TYPE_GML, \
-    CONTENT_TYPE_FLATGEOBUFFERS, CONTENT_TYPE_IMAGE_PNG, CONTENT_TYPE_ALL
+    CONTENT_TYPE_WKB, CONTENT_TYPE_VECTOR_TILE, CONTENT_TYPE_JSON, CONTENT_TYPE_GEOJSON, \
+    CONTENT_TYPE_FLATGEOBUFFERS, CONTENT_TYPE_IMAGE_PNG
 from src.hyper_resource.spatial_collection_resource import SpatialCollectionResource
 from src.orm.action_type import ActionFunction
 from src.orm.database_postgis import DialectDbPostgis
-import json, os
+import os
 
 from src.orm.dictionary_actions_abstract_collection import action_name
 from src.orm.query_builder import QueryBuilder, SASQLBuilder
-from src.url_interpreter.interpreter import Interpreter
 from src.url_interpreter.interpreter_error import PathError
-from src.url_interpreter.interpreter_new import InterpreterNew
-
 MIME_TYPE_JSONLD = "application/ld+json"
-from geoalchemy2.shape import to_shape
+
+
 class FeatureCollectionResource(SpatialCollectionResource):
 
     def __init__(self, request):
@@ -306,7 +298,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
 
     async def get_representation_given_path(self, path: str) -> str:
         try:
-            return await self.get_representation_path(path)
+            #return await self.get_representation_path(path)
 
             paths: list[str] = self.normalize_path_as_list(path, '/*/')
             qb: QueryBuilder = QueryBuilder(dialect_db=self.dialect_DB(), entity_class=self.entity_class())
@@ -534,6 +526,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
             if func_name in d:
                 return True
         return False
+
     def get_function_name_in_dict(self, paths: List[str]) -> Optional[str]:
         d = self.dict_function()
         for path in paths:

@@ -12,7 +12,8 @@ from ..orm.query_builder import QueryBuilder, SASQLBuilder
 from ..url_interpreter.interpreter import Interpreter
 from ..url_interpreter.interpreter_error import PathError
 from ..url_interpreter.interpreter_new import InterpreterNew
-from ..orm.dictionary_actions_abstract_collection import dic_abstract_collection_lookup_action, action_name
+from ..orm.dictionary_actions_abstract_collection import dic_abstract_collection_lookup_action, action_name, \
+    dic_abstract_collection_action
 
 collection_function_names = [
     "filter",
@@ -41,7 +42,7 @@ class AbstractCollectionResource(AbstractResource):
 
     def get_function_names(self) -> List[str]:
         if self.function_names is None:
-            self.function_names = list(dic_abstract_collection_lookup_action.keys())
+            self.function_names = list(dic_abstract_collection_action.keys())
         return self.function_names
 
     async def rows_as_dict(self, rows) -> List[Dict]:
@@ -138,7 +139,6 @@ class AbstractCollectionResource(AbstractResource):
         return await getattr(self, action_name(operation_name))(*[path])
 
     async def response_by_qb(self, qb: QueryBuilder):
-        print(qb.query())
         if (CONTENT_TYPE_JSON in self.accept_type()):
             rows = await self.dialect_DB().fetch_all_by(qb.query())
             rows_dict = await self.rows_as_dict(rows)
@@ -229,19 +229,17 @@ class AbstractCollectionResource(AbstractResource):
             raise PathError(msg, 400)
         return await qb_function[operation_name](*[qb, path])
 
-
-    async def get_representation_path(self, path: str):
+    async def get_representation_given_path(self, path: str):
         try:
             qb: SASQLBuilder = SASQLBuilder(resource=self, path=path, delimiter='/*/', prefix_column=self.protocol_host())
-            res = await qb.select_statement()
-            rows = await self.dialect_DB().fetch_all_by(res)
-            return await self.response_given(rows)
+            res = await qb.execute_statement()
+            return sanic.response.json(res)
         except PathError as err:
             return sanic.response.json(err.message, err.code)
         except (RuntimeError, TypeError, NameError) as err:
             return sanic.response.json("Error {0}".format(err))
 
-    async def get_representation_given_path(self, path: str) -> str:
+    async def get_representation_given_path___(self, path: str) -> str:
         try:
             return await self.get_representation_path(path)
             paths: list[str] = self.normalize_path_as_list(path, '/*/')

@@ -1,6 +1,8 @@
 from typing import Optional, List
 
-from sqlalchemy import Select, text, Column, case
+from sqlalchemy import Select, text, Column, case, Table, func, Engine
+from sqlalchemy import desc, asc
+from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import InstrumentedAttribute
 
 from src.hyper_resource.abstract_resource import AbstractResource
@@ -35,10 +37,9 @@ def normalize_path_as_list(path: str, splitter: str = '/*/') -> list[str]:
        ['unidade-federacao-a-list/nome,sigla,geom','filter/sigla/in/ES,RJ', 'orderby/sigla']
 
     """
-    print("---------------------------------------------------------------------")
-    print(path)
+
     if len(path) == 0:
-        return path
+        return []
     path_local: str = path if path[0] != '/' else path[1:]
     paths: list[str] = path_local.split(splitter)
     return paths if paths[-1] != '' else paths[:-1]
@@ -211,13 +212,28 @@ class SASQLBuilder:
     def __init__(self, resource: AbstractResource, path: str, prefix_column: str | None = None, delimiter: str = '/*/'):
         self.select: Select | None = None
         self.resource = resource
-        self.path = path
-        self.paths = normalize_path_as_list(path=path, splitter=delimiter)
+        self.path: str = path
+        self.paths: list[str] = normalize_path_as_list(path=path, splitter=delimiter)
         self.prefix_column: str | None = prefix_column
-        self.function_names = None
+        self.function_names: list[str] = None
         self.projection: list[str] = self.attribute_names()
+        self.has_count = False
+        self.has_sum: bool = False
+        self.has_max: bool = False
+        self.has_min: bool = False
+        self.has_avg: bool = False
 
-    def dict_function(self) -> dict[str, object]:
+    def initialize_attributes(self):
+        """
+        Initialize variables to reflect the expressions that are in the paths
+        Return None:
+        """
+        for a_path in self.paths:
+            operation_name = first_word(a_path)
+            if operation_name in self.get_operation_names():
+                self.has_projection = True
+
+    def dict_operation(self) -> dict[str, object]:
         """"""
         return {
             'collect': self.add_collect,
@@ -230,7 +246,7 @@ class SASQLBuilder:
             'offsetlimit': self.add_offset_limit,
         }
 
-    def dict_aggregate_function(self) -> dict:
+    def dict_aggregate_operation(self) -> dict:
         """"""
         return {
             'sum': self.add_sum,
@@ -240,9 +256,9 @@ class SASQLBuilder:
             'groupby': self.add_group_by,
         }
 
-    def dict_all_function(self):
+    def dict_all_operation(self):
         """"""
-        return {**self.dict_function(), **self.dict_aggregate_function()}
+        return {**self.dict_operation(), **self.dict_aggregate_operation()}
 
     def interpreter(self, path: str) -> InterpreterNew:
         """
@@ -263,6 +279,9 @@ class SASQLBuilder:
             self.select = Select(*self.columns_alias()).select_from(self.resource.metadata_table())
         return self.select
 
+    def set_select(self, select_obj: Select) -> None:
+        self.select = select_obj
+
     async def add_where(self, path: str) -> None:
         """translate path in a sql expression (predicate) to add in Select object.
            Example: path = filter/valor/gt/100 will render an expression valor > 100 to be appended in Select object
@@ -282,6 +301,17 @@ class SASQLBuilder:
     def add_collect(self, path: str) -> None:
         pass
 
+    def len_columns(self) -> int:
+        return len(self.get_select().selected_columns)
+
+    def has_only_one_aggregate_math_function(self) -> bool:
+        """
+        Returns True if select has only one aggregate function and not have group by
+        Returns bool
+        """
+        return self.len_columns() == 1 and (self.has_sum or self.has_count or self.has_avg or self.has_min or
+                                            self.has_max) and not self.has_group_by()
+
     def all_external_attributes_exists(self, ext_attr_names: set[str]) -> bool:
         """Returns True if all external attribute in the ext_attr_names exists as attribute name in the model class
         Parameters
@@ -291,19 +321,72 @@ class SASQLBuilder:
         set_attr_names = set(self.attribute_names())
         return set_attr_names.union(ext_attr_names) == set_attr_names
 
+    def normalize_sql_clause(self, path: str, clause_name: str) -> str:
+        """
+        remove the sql clause of the beginning and slash if exist at end of path.
+
+        Parameters:
+            path(str) - path have to be a clause sql. Ex.: orderby/name; projection/name,date
+            clause_name (str) - is the clause in the path to remove
+
+        Returns a (str)
+        """
+        local_path: str = path.lower()
+        local_path = local_path[:-1] if local_path[-1] == '/' else local_path
+        len_clause: int = len(f'{clause_name}/')
+        return local_path[len_clause:] if local_path.startswith(f'{clause_name}/') else local_path
+
     async def add_projection(self, path: str) -> None:
-        ext_attr_names: set[str] = {att_name.strip() for att_name in path.lower().split(',')}
+        projection: str = 'projection'
+        a_path: str = path if path.startswith(projection) else f"projection/{path}"
+        local_path = self.normalize_sql_clause(a_path, 'projection').split('/')[0]
+        ext_attr_names: set[str] = {att_name.strip() for att_name in local_path.split(',')}
         if self.all_external_attributes_exists(ext_attr_names):
             self.projection = list(ext_attr_names)
         else:
             dif: set[str] = ext_attr_names.difference(self.attribute_names())
             raise PathError(f"Error in {dif}", code=400)
 
-    def add_order_by(self, path: str) -> None:
-        pass
+    async def add_order_by(self, path: str) -> None:
+        local_path: str = path.lower()
+        local_path = local_path.split('/')  #path = orderby/valor&desc/
+        attribute_order_str: str = local_path[1] #valor&desc
+        attribute_order_list: list[str] = attribute_order_str.split('&')
+        attribute_names: list[str] = attribute_order_list[0].split(',')
+        if not self.all_external_attributes_exists(attribute_names):
+            res = set(attribute_names) - set(self.attribute_names())
+            if len(res) == 1:
+                raise PathError(f"The attribute {list(res).pop()} does not exist", 400)
+            raise PathError(f"These attributes {','.join(list(res))} do not exist", 400)
 
-    def add_count(self, path: str) -> None:
-        pass
+        if len(attribute_order_list) == 1: #valor
+            return self.set_select(self.get_select().order_by(*attribute_names))
+        if len(attribute_order_list) == 2: #valor&desc
+            attribute_orders: list[str] = attribute_order_list[1].split(',')
+            orders: list = []
+            if len(attribute_names) == len(attribute_orders):
+                for idx, att_name in enumerate(attribute_names):
+                    attrib_order = desc(att_name) if attribute_orders[idx] == 'desc' else asc(att_name)
+                    orders.append(attrib_order)
+                self.set_select(self.get_select().order_by(*orders))
+
+            else:
+                order: str = attribute_orders[0]
+                for att_name in attribute_names:
+                    attrib_order = desc(att_name) if order == 'desc' else asc(att_name)
+                    orders.append(attrib_order)
+                self.set_select(self.get_select().order_by(*orders))
+    async def add_count(self, path: str) -> None:
+        self.has_count = True
+        if self.has_only_one_aggregate_math_function():
+            self.projection = None
+        a_path = path.split("/")
+        a_func = func.count(a_path[1]) if len(a_path) == 2 else func.count()
+        if self.get_select().whereclause is not None:
+            select: Select = Select(a_func).select_from(self.entity_class()).where(self.get_select().whereclause)
+        else:
+            select: Select = Select(a_func).select_from(self.entity_class())
+        self.set_select(select)
 
     def add_group_by(self, path: str) -> None:
         pass
@@ -323,14 +406,50 @@ class SASQLBuilder:
     def add_avg(self, path: str) -> None:
         pass
 
-    def add_max(self, path: str) -> None:
-        pass
+    async def add_max(self, path: str) -> None:
+        self.has_max = True
+        if self.has_only_one_aggregate_math_function():
+            self.projection = None
+        a_path = path.split("/")
+        attribute_name: str = a_path[1]
+        col: Column = self.entity_class().column_given(attribute_name)
+        a_func = func.max(col)
+        if self.get_select().whereclause is not None:
+            select: Select = Select(a_func).select_from(self.entity_class()).where(self.get_select().whereclause)
+        else:
+            select: Select = Select(a_func).select_from(self.entity_class())
+        self.set_select(select)
 
     def add_min(self, path: str) -> None:
         pass
 
+    def has_group_by(self) -> bool:
+        return len(self.get_select()._group_by_clauses) > 0
+
     def dialect_db(self) -> DialectDatabase:
-        return self.resource.dialect_db
+        return self.resource.dialect_DB()
+
+    def db(self) -> AsyncEngine | Engine:
+        return self.dialect_db().db
+
+    async def fetch_one(self):
+        async with self.db().connect() as conn:
+            result = await conn.execute(self.get_select())
+            return result.one_or_none()
+
+    async def fetch_all(self):
+        async with self.db().connect() as conn:
+            result = await conn.execute(self.get_select())
+            rows = result.fetchall()
+            return rows
+
+    async def count(self) -> int:
+        """
+        Returns the amount of resource
+
+        """
+        qtd = await self.fetch_one()
+        return qtd if qtd is not None else 0
 
     async def fetch_all_as_geobuf(self):
         a_query: str = self.dialect_db().geobuf_query(self.query())
@@ -359,12 +478,12 @@ class SASQLBuilder:
             None
         """
         operation_name: str = self.operation_name_in_path(path)
-        if operation_name not in self.dict_all_function().keys():
+        if operation_name not in self.dict_all_operation().keys():
             msg: str = f"Error in path. This {operation_name} does not exists"
             raise PathError(msg, 400)
-        return await self.dict_all_function()[operation_name](*[path])
+        return await self.dict_all_operation()[operation_name](*[path])
 
-    def get_function_names(self) -> list[str]:
+    def get_operation_names(self) -> list[str]:
         """Returns a list of function names. Each type of resource has different functions
             Returns
                 list(str) - list function names
@@ -374,7 +493,22 @@ class SASQLBuilder:
         return self.function_names
 
     def entity_class(self) -> type[AlchemyBase]:
+        """
+        Returns the correspondent type of the entity class with the resource instance
+
+        Returns
+            type[AlchemyBase]
+        """
         return self.resource.entity_class()
+
+    def table(self) -> Table:
+        """
+        Returns the correspondent type of the entity class with the resource instance
+
+        Returns
+            type[AlchemyBase]
+        """
+        return self.entity_class().table()
 
     def attribute_names(self) -> list[str]:
         """
@@ -389,7 +523,7 @@ class SASQLBuilder:
         operation_name_or_attribute_comma: str = first_word(path)
         if ',' in operation_name_or_attribute_comma or operation_name_or_attribute_comma in self.attribute_names():
             return 'projection'
-        if operation_name_or_attribute_comma in self.get_function_names():
+        if operation_name_or_attribute_comma in self.get_operation_names():
             return operation_name_or_attribute_comma
         msg = f"This {path} is incorrect"
         print(msg)
@@ -400,7 +534,7 @@ class SASQLBuilder:
         paths should like
         Returns
         function_name (str) or None """
-        d = self.dict_all_function()
+        d = self.dict_all_operation()
         for path in self.paths:
             func_name: str = self.operation_name_in_path(path)
             if func_name in d:
@@ -417,6 +551,22 @@ class SASQLBuilder:
         self.select = self.get_select()
         return self.get_select()
 
+    async def execute_statement(self) -> object:
+        """Execute statement from path
+        Returns
+            Depends on result of sql statement"""
+        await self.select_statement()
+        print("self.has_only_one_aggregate_math_function():")
+        if self.has_only_one_aggregate_math_function():
+            res = await self.fetch_one()
+            return res[0] if res is not None else 0
+        else:
+            rows = await self.fetch_all()
+            return await self.rows_as_dict(rows)
+
+    async def rows_as_dict(self, rows) -> list[dict]:
+        return [await self.dialect_db().convert_row_to_dict(row) for row in rows]
+
     def alias_column(self, inst_attr: InstrumentedAttribute) -> object:
         if self.entity_class().is_relationship_fk_attribute(inst_attr) and self.prefix_column is not None:
             col = self.entity_class().column(inst_attr)
@@ -424,7 +574,6 @@ class SASQLBuilder:
             prefix_model: str = f"{self.prefix_column}{model_class.router_list()}/"
             a_case = case((inst_attr is not None, col._rconcat(prefix_model)), else_=None).label(f"{self.entity_class().attribute_name_given(inst_attr)}")
             return a_case
-            #return f"CASE WHEN {col_name} is not null THEN '{self.prefix_col}{model_class.router_list()}/' || {col_name} ELSE null  END AS {self.entity_class.attribute_name_given(inst_attr)}"
         elif self.entity_class().is_primary_key(inst_attr):
             pref = f'{self.prefix_column}{self.entity_class().router_list()}/' if self.prefix_column is not None else ''
             col = self.entity_class().column(inst_attr)
@@ -440,7 +589,10 @@ class SASQLBuilder:
 
     def columns_alias(self) -> list:
         attr_names = self.projection
-        attributes = [self.entity_class().__dict__[name] for name in attr_names if name in self.entity_class().__dict__.keys()]
+        if attr_names:
+            attributes = [self.entity_class().__dict__[name] for name in attr_names if name in self.entity_class().__dict__.keys()]
+        else:
+            attributes = self.entity_class().all_attributes()
         list_col = []
         for att in attributes:
             col: Column | None = self.alias_column(att)

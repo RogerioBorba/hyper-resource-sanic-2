@@ -1,7 +1,7 @@
 # from __future__ import annotations
 from typing import Dict, Tuple, Sequence, List, Any, Optional
 
-from sqlalchemy import ForeignKey, Column
+from sqlalchemy import ForeignKey, Column, Table
 from sqlalchemy.orm import ColumnProperty, RelationshipProperty
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
@@ -26,6 +26,10 @@ class AlchemyBase(Base):
         return cls.__table_args__ ['schema']
 
     @classmethod
+    def table(cls) -> Table:
+        return cls.__table__
+
+    @classmethod
     def table_name(cls) -> str:
         return cls.__table__.name
 
@@ -36,6 +40,10 @@ class AlchemyBase(Base):
     @classmethod
     def is_primary_key(cls, attribute: InstrumentedAttribute) -> bool:
         return isinstance(attribute.prop, ColumnProperty) and attribute.prop.columns[0].primary_key
+
+    @classmethod
+    def geo_attribute_name(cls) -> str:
+        pass
 
     @classmethod
     def is_foreign_key_attribute(cls, attribute) -> bool:
@@ -83,6 +91,17 @@ class AlchemyBase(Base):
     @classmethod
     def attribute_names(cls) ->List[str]:
         return [ key for key, value in cls.__dict__.items() if cls.is_attribute_without_relationship(value)]
+
+    @classmethod
+    def all_attributes(cls) -> list[InstrumentedAttribute]:
+        """Returns a list of InstrumentedAttribute
+
+        Return
+        list[InstrumentedAttribute]
+        """
+
+        return [attrib for name, attrib in cls.__dict__.items() if isinstance(attrib, InstrumentedAttribute)]
+
     @classmethod
     def all_attribute_names(cls) -> List[str]:
         return [key for key, value in cls.__dict__.items() if isinstance(value, InstrumentedAttribute)]
@@ -212,6 +231,13 @@ class AlchemyBase(Base):
     @classmethod
     def column_names(cls)-> List[str]:
         return [col.name for col in cls.__table__.columns if not isinstance(col, ForeignKey)]
+
+    @classmethod
+    def column_given(cls, attribute_name: str) -> Column | None:
+        attribute: InstrumentedAttribute = cls.__dict__[attribute_name]
+        return cls.column(attribute)
+
+
     @classmethod
     def column_name(cls, attribute_name: str) -> str:
         attribute = cls.__dict__[attribute_name]
