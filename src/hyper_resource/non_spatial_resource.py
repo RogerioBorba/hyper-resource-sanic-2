@@ -19,8 +19,8 @@ class NonSpatialResource(AbstractResource):
     async def get_json_representation(self, id_or_key_value):
         row = await self.dialect_DB().fetch_one_as_json(id_or_key_value, None, self.protocol_host())
         if row is None:
-            return sanic.response.json("The resource was not found.", status=404)
-        return sanic.response.text(row, content_type='application/json')
+            return sanic.response.text("The resource was not found.", status=404)
+        return sanic.response.json(row, content_type='application/json')
 
     async def get_representation(self, id_or_key_value):
         try:

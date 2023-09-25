@@ -33,6 +33,13 @@ dic_math_aggregate_action: Dict[str, ActionFunction] = {
                           description= 'Max of the attribute.',
                           example="api/expenses/cost/min",
                           representations=representations),
+'count': ActionFunction(name='count',
+                          name_operation='count',
+                          answer=Number,
+                          param_actions=[],
+                          description= 'count of the attribute.',
+                          example="api/expenses/cost/count",
+                          representations=representations),
 
 }
 dic_date_action:  Dict[str, ActionFunction] = {

@@ -1,8 +1,8 @@
 # from __future__ import annotations
 from typing import Dict, Tuple, Sequence, List, Any, Optional
 
-from sqlalchemy import ForeignKey, Column, Table
-from sqlalchemy.orm import ColumnProperty, RelationshipProperty
+from sqlalchemy import ForeignKey, Column, Table, inspect
+from sqlalchemy.orm import ColumnProperty, RelationshipProperty, class_mapper
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from src.hyper_resource.basic_route import BasicRoute
@@ -78,16 +78,30 @@ class AlchemyBase(Base):
     def column_name_or_none(cls, inst_attr: InstrumentedAttribute) -> str | None:
         if isinstance(inst_attr.prop, ColumnProperty):
             return inst_attr.prop.columns[0].name
-        elif isinstance(inst_attr.prop, RelationshipProperty) and list(inst_attr.prop._user_defined_foreign_keys)[0] is not None:
-            return list(inst_attr.prop._user_defined_foreign_keys)[0].name
+        elif isinstance(inst_attr.prop, RelationshipProperty):
+
+            #prop = inspect(inst_attr.prop)
+            #lcp = list(prop.local_remote_pairs)
+            #if len(lcp) == 0:
+            #    return  None
+            #return lcp[0].key
+            #mapper = class_mapper(cls)
+            mapper = cls.__mapper__
+            lrp = mapper.relationships[inst_attr.key].local_remote_pairs
+            if len(lrp) == 0:
+                return None
+            fk_name = lrp[0][1].key
+            return fk_name
         return None
 
     @classmethod
     def class_given_relationship_fk(cls, inst_attr: InstrumentedAttribute):
         return inst_attr.prop.entity.class_
+
     @classmethod
     def is_attribute_without_relationship(cls, attribute):
         return isinstance(attribute, InstrumentedAttribute) and isinstance(attribute.prop, ColumnProperty)
+
     @classmethod
     def attribute_names(cls) ->List[str]:
         return [ key for key, value in cls.__dict__.items() if cls.is_attribute_without_relationship(value)]
@@ -121,6 +135,12 @@ class AlchemyBase(Base):
     @classmethod
     def attribute_name_given(cls, attribute: InstrumentedAttribute)-> str:
         return attribute.prop.key
+
+    @classmethod
+    def attribute_given(cls, attribute_name: str) -> Column | None:
+        if attribute_name not in cls.__dict__:
+            return None
+        return cls.__dict__[attribute_name]
 
     @classmethod
     def attrib_name_col_name_type_col_name(cls, attribute_name) -> Tuple[str, str, str]:
@@ -157,8 +177,9 @@ class AlchemyBase(Base):
     @classmethod
     def attributes_with_dereferenceable(cls, attrib=None) -> List[tuple]:
         items = cls.__dict__.items() if attrib is None else attrib.__dict__.items()
-        return [(key, value) for key, value in items if
-                         cls.is_not_foreign_key_attribute(value) or cls.is_relationship_attribute(value)]
+
+        return [(key, value) for key, value in items if isinstance(value, InstrumentedAttribute) and
+                (cls.is_not_foreign_key_attribute(value) or cls.is_relationship_attribute(value))]
 
     @classmethod
     def attribute_names_with_dereferenceable(cls, attrib: InstrumentedAttribute = None) -> List[str]:
@@ -234,12 +255,16 @@ class AlchemyBase(Base):
 
     @classmethod
     def column_given(cls, attribute_name: str) -> Column | None:
+        if attribute_name not in cls.__dict__:
+            return None
         attribute: InstrumentedAttribute = cls.__dict__[attribute_name]
         return cls.column(attribute)
 
 
     @classmethod
-    def column_name(cls, attribute_name: str) -> str:
+    def column_name(cls, attribute_name: str) -> str | None:
+        if not attribute_name in cls.__dict__:
+            return None
         attribute = cls.__dict__[attribute_name]
         return cls.column_name_or_none(attribute)
 

@@ -154,7 +154,7 @@ class DialectDbPostgresql(DialectDatabase):
         attributes = [self.entity_class.__dict__[name] for name in attr_names]
         list_col = []
         for att in attributes:
-            col: Column | None = self.alias_column(att, prefix_col_val)
+            col: str | None = self.alias_column(att, prefix_col_val)
             if col is not None:
                 list_col.append(col)
         return ','.join(list_col)
@@ -214,7 +214,7 @@ class DialectDbPostgresql(DialectDatabase):
         query = self.basic_select_by_id(pk, tuple_attrib, prefix_col_val)
         sql = f"select {self.function_db()}(t.*) from ({query}) as t;"
         row: Row = await self.fetch_one_by(sql)
-        return None if row is None else row[0]
+        return None if row is None else row._mapping[self.function_db()]
 
     async def fetch_all_model(self, tuple_attrib : Tuple[str] = None, prefix_col_val: str=None):
         query = self.basic_select(tuple_attrib, prefix_col_val)

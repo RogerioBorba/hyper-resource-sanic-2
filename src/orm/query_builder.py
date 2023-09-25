@@ -1,17 +1,34 @@
+import re
 from typing import Optional, List
-
-from sqlalchemy import Select, text, Column, case, Table, func, Engine
+from sqlalchemy import Select, text, Column, case, Table, func, Engine, literal_column
 from sqlalchemy import desc, asc
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.sql.functions import _FunctionGenerator
 
 from src.hyper_resource.abstract_resource import AbstractResource
 from src.orm.database import DialectDatabase
 from src.orm.models import AlchemyBase
 from src.url_interpreter.interpreter_error import PathError
 from src.url_interpreter.interpreter_new import InterpreterNew
+import urllib.parse
+MAX: str = 'max'
+MIN: str = 'min'
+COUNT: str = 'count'
+AVG: str = 'avg'
+SUM: str = 'sum'
+GROUPBY: str = 'groupby'
+HAVING: str = 'having'
+ORDERBY: str = 'orderby'
+PROJECTION: str = 'projection'
+LIMIT: str = 'limit'
+OFFSET: str = 'offset'
+OFFSETLIMIT: str = 'offsetlimit'
+FILTER: str = 'filter'
+COLLECT: str = 'collect'
 
-
+HYPER_OPERATION_NAMES: list[str] = [MAX, MIN, COUNT, AVG, SUM, GROUPBY, HAVING, ORDERBY, PROJECTION, LIMIT,
+                                    OFFSET, OFFSETLIMIT, FILTER, COLLECT]
 def first_word(path: str, separator: str = '/') -> str:
     """
     Returns the first word in path (str)
@@ -37,6 +54,27 @@ def normalize_path_as_list(path: str, splitter: str = '/*/') -> list[str]:
        ['unidade-federacao-a-list/nome,sigla,geom','filter/sigla/in/ES,RJ', 'orderby/sigla']
 
     """
+    if len(path) == 0:
+        return []
+    path_local: str = urllib.parse.unquote(path) if path[0] != '/' else urllib.parse.unquote(path[1:])
+    partes = re.split('''\/\*\/(?=(?:[^'"]|'[^']*'|"[^"]*")*$)''', path_local)
+    return partes
+
+
+def split_by_slash(path: str) -> list[str]:
+    return re.split('''\/(?=(?:[^'"]|'[^']*'|"[^"]*")*$)''', path)
+
+def normalize_path_as_list_old(path: str, splitter: str = '/*/') -> list[str]:
+    """Returns a list of path separated by splitter
+    Parameters:
+        path (str): a path from outside
+        splitter (str): a separator string.
+    Returns:
+       A list(str) of path.
+       Ex.: unidade-federacao-a-list/nome,sigla,geom/*/filter/sigla/in/ES,RJ/*/orderby/sigla
+       ['unidade-federacao-a-list/nome,sigla,geom','filter/sigla/in/ES,RJ', 'orderby/sigla']
+
+    """
 
     if len(path) == 0:
         return []
@@ -47,7 +85,7 @@ def normalize_path_as_list(path: str, splitter: str = '/*/') -> list[str]:
 
 class QueryBuilder:
 
-    def __init__(self, dialect_db: DialectDatabase, entity_class: type, prefix_column: Optional[str] = None):
+    def __init__(self, dialect_db: DialectDatabase, entity_class: type[AlchemyBase], prefix_column: Optional[str] = None):
         self.columns: List = []
         self.wheres: List = []
         self.table_names: List = []
@@ -201,59 +239,86 @@ class QueryBuilder:
         if len(rows):
             row = rows[0]
             return row._mapping['st_asflatgeobuf']
-        None
+
 
     def interpreter(self, path: str = ''):
         return InterpreterNew(path, self.entity_class, self.dialect_db)
 
 
 class SASQLBuilder:
-
+    # Select is composed of: projection, from, where, group by, having, order by
     def __init__(self, resource: AbstractResource, path: str, prefix_column: str | None = None, delimiter: str = '/*/'):
         self.select: Select | None = None
-        self.resource = resource
+        self.resource: AbstractResource = resource
         self.path: str = path
-        self.paths: list[str] = normalize_path_as_list(path=path, splitter=delimiter)
+        self.paths: list[str] = []
         self.prefix_column: str | None = prefix_column
         self.function_names: list[str] = None
-        self.projection: list[str] = self.attribute_names()
+        self.projection: list = []
         self.has_count = False
         self.has_sum: bool = False
         self.has_max: bool = False
         self.has_min: bool = False
         self.has_avg: bool = False
+        self.has_projection: bool = False
+        self.has_collect: bool = False
+        self.has_filter: bool = False
+        self.has_offset: bool = False
+        self.has_limit: bool = False
+        self.has_offsetlimit: bool = False
+        self.has_groupby: bool = False
+        self.has_having: bool = False
+        self.has_orderby: bool = False
+        self.initialize_attributes(path, delimiter)
 
-    def initialize_attributes(self):
+    def initialize_attributes(self, path: str, delimiter: str = '/*/'):
         """
         Initialize variables to reflect the expressions that are in the paths
         Return None:
         """
+        self.paths = normalize_path_as_list(path, delimiter)
         for a_path in self.paths:
             operation_name = first_word(a_path)
-            if operation_name in self.get_operation_names():
-                self.has_projection = True
+            if operation_name in HYPER_OPERATION_NAMES:
+                setattr(self, f"has_{operation_name}", True)
+
+    def projection_is_empty(self) -> bool:
+        """
+        Returns true if projection is empty
+        Returns (bool)
+
+        """
+        return len(self.projection) == 0
+
+    def set_true_operation_in_path(self, operation_name) -> None:
+        """Sets true if operation is in path
+         Parameters
+         operation_name (str) - operationa name in the path. Ex.: max/value
+         Returns
+           None
+         """
 
     def dict_operation(self) -> dict[str, object]:
         """"""
         return {
-            'collect': self.add_collect,
-            'projection': self.add_projection,
-            'count': self.add_count,
-            'orderby': self.add_order_by,
-            'filter': self.add_where,
-            'offset': self.add_offset,
-            'limit': self.add_limit,
-            'offsetlimit': self.add_offset_limit,
+            COLLECT: self.add_collect,
+            PROJECTION: self.add_projection,
+            COUNT: self.add_count,
+            ORDERBY: self.add_order_by,
+            FILTER: self.add_where,
+            OFFSET: self.add_offset,
+            LIMIT: self.add_limit,
+            OFFSETLIMIT: self.add_offset_limit,
         }
 
     def dict_aggregate_operation(self) -> dict:
         """"""
         return {
-            'sum': self.add_sum,
-            'avg': self.add_avg,
-            'max': self.add_max,
-            'min': self.add_min,
-            'groupby': self.add_group_by,
+            SUM: self.add_sum,
+            AVG: self.add_avg,
+            MAX: self.add_max,
+            MIN: self.add_min,
+            GROUPBY: self.add_group_by,
         }
 
     def dict_all_operation(self):
@@ -274,32 +339,23 @@ class SASQLBuilder:
         entity_class: type[AlchemyBase] = self.resource.entity_class()
         return InterpreterNew(an_expression=path, model_class=entity_class, dialect_db=dialect_db)
 
+
+    def get_projection(self) -> list:
+        """
+        Returns the projection in SqlAlchemy contending object of type columns and others in list
+        Returns (list)
+        """
+        if self.projection_is_empty():
+            self.projection = self.columns_alias()
+        return self.projection
+
     def get_select(self) -> Select:
         if self.select is None:
-            self.select = Select(*self.columns_alias()).select_from(self.resource.metadata_table())
+            self.select = Select(*self.get_projection()).select_from(self.resource.metadata_table())
         return self.select
 
     def set_select(self, select_obj: Select) -> None:
         self.select = select_obj
-
-    async def add_where(self, path: str) -> None:
-        """translate path in a sql expression (predicate) to add in Select object.
-           Example: path = filter/valor/gt/100 will render an expression valor > 100 to be appended in Select object
-
-            Paramaters
-                path (str) - is a string containing an external expression, such as filter/valor/gt/100, i.e,
-                operation name and rest of the string.
-
-
-            Returns
-                None
-        """
-        path_without_operation_name: str = "/".join(path.split("/")[1:])
-        expr: str = await self.interpreter(path_without_operation_name).translate_lookup()
-        self.select = self.get_select().where(text(expr))
-
-    def add_collect(self, path: str) -> None:
-        pass
 
     def len_columns(self) -> int:
         return len(self.get_select().selected_columns)
@@ -336,14 +392,45 @@ class SASQLBuilder:
         len_clause: int = len(f'{clause_name}/')
         return local_path[len_clause:] if local_path.startswith(f'{clause_name}/') else local_path
 
+    async def add_where(self, path: str) -> None:
+        """translate path in a sql expression (predicate) to add in Select object.
+           Example: path = filter/valor/gt/100 will render an expression valor > 100 to be appended in Select object
+
+            Paramaters
+                path (str) - is a string containing an external expression, such as filter/valor/gt/100, i.e,
+                operation name and rest of the string.
+
+
+            Returns
+                None
+        """
+        path_without_operation_name: str = "/".join(path.split('/'))
+        expr: str = await self.interpreter(path_without_operation_name).translate_lookup()
+        self.select = self.get_select().where(text(expr))
+
+    async def add_collect(self, path: str) -> None:
+        self.has_collect = True
+        path_as_list: list = path.split('/')
+        attribute_name: str = path_as_list[1]
+        if not self.entity_class().has_attribute(attribute_name):
+            raise PathError(message=f'Attribute {attribute_name} does not exist', code=400)
+        if len (path_as_list) < 3:
+            raise PathError(message=f'Collect path, {path}, is incorrect', code=400)
+        expr: str = await self.interpreter(path).translate_to_collect(path, protocol_host=self.resource.protocol_host())
+        label: str = f'{path_as_list[1]}_{path_as_list[-1]}'
+        literal_col = literal_column(expr).label(label)
+        self.projection.append(literal_col)
+
     async def add_projection(self, path: str) -> None:
         projection: str = 'projection'
+        self.has_projection = True
         a_path: str = path if path.startswith(projection) else f"projection/{path}"
         local_path = self.normalize_sql_clause(a_path, 'projection').split('/')[0]
         ext_attr_names: set[str] = {att_name.strip() for att_name in local_path.split(',')}
         if self.all_external_attributes_exists(ext_attr_names):
-            self.projection = list(ext_attr_names)
+            self.projection = self.columns_alias(list(ext_attr_names))
         else:
+            self.has_projection = False
             dif: set[str] = ext_attr_names.difference(self.attribute_names())
             raise PathError(f"Error in {dif}", code=400)
 
@@ -369,17 +456,15 @@ class SASQLBuilder:
                     attrib_order = desc(att_name) if attribute_orders[idx] == 'desc' else asc(att_name)
                     orders.append(attrib_order)
                 self.set_select(self.get_select().order_by(*orders))
-
             else:
                 order: str = attribute_orders[0]
                 for att_name in attribute_names:
                     attrib_order = desc(att_name) if order == 'desc' else asc(att_name)
                     orders.append(attrib_order)
                 self.set_select(self.get_select().order_by(*orders))
+
     async def add_count(self, path: str) -> None:
         self.has_count = True
-        if self.has_only_one_aggregate_math_function():
-            self.projection = None
         a_path = path.split("/")
         a_func = func.count(a_path[1]) if len(a_path) == 2 else func.count()
         if self.get_select().whereclause is not None:
@@ -388,40 +473,78 @@ class SASQLBuilder:
             select: Select = Select(a_func).select_from(self.entity_class())
         self.set_select(select)
 
-    def add_group_by(self, path: str) -> None:
-        pass
+    async def add_group_by(self, path: str) -> None:
+        self.has_groupby = True
+        sub_paths: list[str] = self.path.split('/') #groupby/tipo_gasto/count
+        await self.add_collect(f'collect/{"/".join(sub_paths[1:])}')
+        attribute_name: str = sub_paths[1]
+        attrib = self.entity_class().attribute_given(attribute_name)
+        self.entity_class().is_relationship_attribute(attrib)
+        col: Column = self.entity_class().column_given(attribute_name)
+        self.projection.append(col)
+        select: Select = self.get_select().group_by(col)
+        self.set_select(select)
 
-    def add_offset(self, path: str) -> None:
-        pass
+    async def add_offset(self, path: str) -> None:
+        try:
+            self.has_offset = True
+            offset: int = int(path.split("/")[1])
+            select: Select = self.get_select().offset(offset)
+            self.set_select(select)
+        except ValueError:
+            raise PathError(message=f"path must have 1 integer. Path: {path}", code=400)
+        except Exception:
+            raise PathError(message=f"path is not ok. Path: {path}", code=400)
 
-    def add_limit(self, path: str) -> None:
-        pass
+    async def add_limit(self, path: str) -> None:
+        try:
+            self.has_limit = True
+            limit = int(path.split("/")[1])
+            select: Select = self.get_select().limit(limit)
+            self.set_select(select)
+        except ValueError:
+            raise PathError(message=f"path must have 1 integer. Path: {path}", code=400)
+        except Exception:
+            raise PathError(message=f"path is not ok. Path: {path}", code=400)
 
-    def add_offset_limit(self, path: str) -> None:
-        pass
+    async def add_offset_limit(self, path: str) -> None:
+        try:
+            self.has_offsetlimit = True
+            offset, limit = path.split("/")[1].split('&')
+            select: Select = self.get_select().slice(int(offset), int(limit))
+            self.set_select(select)
 
-    def add_sum(self, path: str) -> None:
-        pass
+        except ValueError:
+            raise PathError(message=f"path must have 2 integers separated by &. Path: {path}", code=400)
+        except Exception:
+            raise PathError(message=f"path is not ok. Path: {path}", code=400)
 
-    def add_avg(self, path: str) -> None:
-        pass
-
-    async def add_max(self, path: str) -> None:
-        self.has_max = True
-        if self.has_only_one_aggregate_math_function():
-            self.projection = None
+    async def add_aggragate_function(self, path: str, funct: _FunctionGenerator):
         a_path = path.split("/")
         attribute_name: str = a_path[1]
         col: Column = self.entity_class().column_given(attribute_name)
-        a_func = func.max(col)
+        a_func = funct(col)
         if self.get_select().whereclause is not None:
             select: Select = Select(a_func).select_from(self.entity_class()).where(self.get_select().whereclause)
         else:
             select: Select = Select(a_func).select_from(self.entity_class())
         self.set_select(select)
 
-    def add_min(self, path: str) -> None:
-        pass
+    async def add_sum(self, path: str) -> None:
+        self.has_sum = True
+        return await self.add_aggragate_function(path, func.sum)
+
+    async def add_avg(self, path: str) -> None:
+        self.has_avg = True
+        return await self.add_aggragate_function(path, func.avg)
+
+    async def add_max(self, path: str) -> None:
+        self.has_max = True
+        return await self.add_aggragate_function(path, func.max)
+
+    async def add_min(self, path: str) -> None:
+        self.has_min = True
+        return await self.add_aggragate_function(path, func.min)
 
     def has_group_by(self) -> bool:
         return len(self.get_select()._group_by_clauses) > 0
@@ -472,7 +595,8 @@ class SASQLBuilder:
 
         Paramaters
             path (str) - is a string containing an expression, i.e, operation name and rest of the string.
-            Example: filter/valor/gt/100, where filter is the operation name to be executed to be appended in Select object
+            Example: filter/valor/gt/100,
+            where filter is the operation name to be executed and to be appended in Select object
 
         Returns
             None
@@ -529,18 +653,6 @@ class SASQLBuilder:
         print(msg)
         raise PathError(msg, 400)
 
-    def get_function_name_in_dict(self) -> str | None:
-        """Returns the name of the correspondent function in the paths if exists, otherwise None.
-        paths should like
-        Returns
-        function_name (str) or None """
-        d = self.dict_all_operation()
-        for path in self.paths:
-            func_name: str = self.operation_name_in_path(path)
-            if func_name in d:
-                return func_name
-        return None
-
     async def select_statement(self) -> Select:
         """Returns a Select object from paths
         Returns
@@ -556,7 +668,7 @@ class SASQLBuilder:
         Returns
             Depends on result of sql statement"""
         await self.select_statement()
-        print("self.has_only_one_aggregate_math_function():")
+        print(self.get_select())
         if self.has_only_one_aggregate_math_function():
             res = await self.fetch_one()
             return res[0] if res is not None else 0
@@ -587,12 +699,11 @@ class SASQLBuilder:
             return col.label(attr_name)
         #c = case((Gasto.valor > 1000, Gasto.valor * 20), else_=Gasto.valor)
 
-    def columns_alias(self) -> list:
-        attr_names = self.projection
+    def columns_alias(self, attr_names: list[str] | None = None) -> list:
         if attr_names:
             attributes = [self.entity_class().__dict__[name] for name in attr_names if name in self.entity_class().__dict__.keys()]
         else:
-            attributes = self.entity_class().all_attributes()
+            attributes = [ attr for name, attr in  self.entity_class().attributes_with_dereferenceable()]
         list_col = []
         for att in attributes:
             col: Column | None = self.alias_column(att)

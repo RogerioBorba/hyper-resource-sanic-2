@@ -1,5 +1,5 @@
 from typing import Any, List, Optional, Dict
-
+from geoalchemy2 import functions
 import httpx
 from sqlalchemy import sql, String, INT
 
@@ -503,5 +503,27 @@ class InterpreterNew:
         #last_action_name: str = attrib_actions[-1] if last_action.has_not_parameters() else attrib_actions[-2]
         attribute_name_act = attribute_name_actions.split('/')[0]
         predicate_action: str = f'{action_translated} as {attribute_name_act}_{last_action.name}'
+        return self.dialect_db.predicate_collect(attribute_names[0:-1], predicate_action, protocol_host)
+
+    async def translate_to_collect(self, path, protocol_host: str) -> str:
+      # /collect/date,name&geom/transform/3005/area
+        a_path: str = path[8:]  # len(collect/) = 8
+        if '&' in a_path:
+            paths: List[str] = a_path.split('&')
+            attribute_name_actions: str = paths[1]
+            enum_attrib_name: str = paths[0]
+        else:
+            attribute_name_actions: str = a_path
+            enum_attrib_name: Optional[str] = ''  # /collect/geom/transform/3005/area
+        attrib_actions: List[str] = normalize_path_as_list(attribute_name_actions, '/')
+        action_translated: str = await self.translate_path(attribute_name_actions)  # path => filter/license/eq/valid
+
+        enum_att_list: List[str] = enum_attrib_name.split(',') if len(enum_attrib_name) > 0 else []
+        attribute_names: List[str] = enum_att_list + [attribute_name_actions[0: attribute_name_actions.index('/')]]
+        self.raise_path_error_if_has_not_attributes(attribute_names)
+        last_action: ActionFunction = await self.last_action_in_collect(attrib_actions=attrib_actions)
+        #last_action_name: str = attrib_actions[-1] if last_action.has_not_parameters() else attrib_actions[-2]
+        #attribute_name_act = attribute_name_actions.split('/')[0]
+        predicate_action: str = f'{action_translated}'
         return self.dialect_db.predicate_collect(attribute_names[0:-1], predicate_action, protocol_host)
 
