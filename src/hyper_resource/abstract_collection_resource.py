@@ -1,4 +1,6 @@
 import time
+import urllib
+
 from asyncpg import UniqueViolationError, DataError
 from settings import BASE_DIR, SOURCE_DIR
 import sanic
@@ -8,7 +10,8 @@ from src.hyper_resource.abstract_resource import AbstractResource, MIME_TYPE_JSO
 from src.hyper_resource.context.abstract_context import AbstractCollectionContext
 from src.hyper_resource.common_resource import CONTENT_TYPE_HTML, CONTENT_TYPE_JSON, CONTENT_TYPE_XML, dict_to_xml
 from ..orm.action_type import ActionFunction
-from ..orm.query_builder import QueryBuilder, SASQLBuilder
+from ..orm.query_builder import QueryBuilder
+from src.orm.sa_sql_builder import SASQLBuilder
 from ..url_interpreter.interpreter import Interpreter
 from ..url_interpreter.interpreter_error import PathError
 from ..url_interpreter.interpreter_new import InterpreterNew
@@ -231,7 +234,8 @@ class AbstractCollectionResource(AbstractResource):
 
     async def get_representation_given_path(self, path: str):
         try:
-            qb: SASQLBuilder = SASQLBuilder(resource=self, path=path, delimiter='/*/', prefix_column=self.protocol_host())
+            a_path: str = urllib.parse.unquote(path)
+            qb: SASQLBuilder = SASQLBuilder(resource=self, path=a_path, delimiter='/*/', prefix_column=self.protocol_host())
             res = await qb.execute_statement()
             return sanic.response.json(res)
         except PathError as err:
@@ -241,6 +245,7 @@ class AbstractCollectionResource(AbstractResource):
 
     async def get_representation_given_path___(self, path: str) -> str:
         try:
+            path = urllib.parse.unquote(path)
             return await self.get_representation_path(path)
             paths: list[str] = self.normalize_path_as_list(path, '/*/')
             qb: QueryBuilder = QueryBuilder(dialect_db=self.dialect_DB(), entity_class=self.entity_class())

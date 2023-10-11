@@ -1,3 +1,5 @@
+import urllib
+
 import sanic
 from sanic import response
 
@@ -34,6 +36,7 @@ class NonSpatialResource(AbstractResource):
             return sanic.response.json({"Error": f"{err}"})
 
     async def get_representation_given_path(self, id_or_key_value, a_path):
+           a_path = urllib.parse.unquote(a_path)
            if a_path[-1] == '/':  # Removes trail slash
                 a_path = a_path[:-1]
            operation_name_or_atribute_comma = a_path.split('/')[0].strip().lower()

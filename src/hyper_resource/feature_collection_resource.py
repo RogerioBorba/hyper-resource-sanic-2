@@ -1,4 +1,6 @@
 import io
+import urllib
+
 import matplotlib.pyplot as plt
 import time
 from typing import List, Tuple, Optional, Dict
@@ -19,7 +21,8 @@ from src.orm.database_postgis import DialectDbPostgis
 import os
 
 from src.orm.dictionary_actions_abstract_collection import action_name
-from src.orm.query_builder import QueryBuilder, SASQLBuilder
+from src.orm.query_builder import QueryBuilder
+from src.orm.sa_sql_builder import SASQLBuilder
 from src.url_interpreter.interpreter_error import PathError
 MIME_TYPE_JSONLD = "application/ld+json"
 
@@ -286,6 +289,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
 
     async def get_representation_path(self, path: str):
         try:
+            path = urllib.parse.unquote(path)
             qb: SASQLBuilder = SASQLBuilder(resource=self, path=path, delimiter='/*/')
             res = qb.select_statement()
             print(res)
@@ -299,7 +303,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
     async def get_representation_given_path(self, path: str) -> str:
         try:
             #return await self.get_representation_path(path)
-
+            path = urllib.parse.unquote(path)
             paths: list[str] = self.normalize_path_as_list(path, '/*/')
             qb: QueryBuilder = QueryBuilder(dialect_db=self.dialect_DB(), entity_class=self.entity_class())
             qb.has_geometry = True

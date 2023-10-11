@@ -33,6 +33,8 @@ class Expression:
             self._matches = [match for match in pattern.finditer(self.string)]
         return self._matches
 
+    def split_by_slash(self, path: str) -> list[str]:
+        return re.split('''/(?=(?:[^'"]|'[^']*'|"[^"]*")*$)''', path)
     def has_not_delimiter(self) -> bool:
         return not self.has_delimiter()
 
@@ -74,7 +76,7 @@ class Expression:
                 str_aux = str_aux[1:]
             if str_aux[-1] == '/':
                 str_aux = str_aux[0:-1]
-            ls = str_aux.split('/')
+            ls = self.split_by_slash(str_aux) #str_aux.split('/')
             self._twords = [TWord(st, TWord.SIMPLE_CATEGORY) for st in ls]
 
         return self._twords

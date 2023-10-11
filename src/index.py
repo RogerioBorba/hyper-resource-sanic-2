@@ -9,11 +9,10 @@ from src.orm.database_postgresql import DialectDbPostgresql
 #from src.routes.municipio.populacao.ano_22 import resource
 from src.resources.setup_resources import setup_all_resources
 from src.routes.entry_point import api_entry_point
-
 from src.routes.setup_routes import setup_all_routes
 # Create Sanic app
 app = Sanic(__name__)
-
+ClientIOHTTP()
 
 # Setup env
 env = Env()
@@ -27,11 +26,11 @@ access_log: bool = env.bool("ACESS_LOG", False)
 # Setup all routes
 setup_all_routes(app)
 
-@app.listener("before_server_start")
+@app.listener("after_server_start")
 async def init_session(app, loop):
-    print('before_server_start')
+    print('after_server_start')
     app.ctx.aiohttp_session = aiohttp.ClientSession(loop=loop)
-    ClientIOHTTP().session = aiohttp.ClientSession(loop=loop)  # app.aiohttp_session
+    ClientIOHTTP().session = app.ctx.aiohttp_session #aiohttp.ClientSession(loop=loop)  # app.aiohttp_session
     print("Initializing ClientIOHTTP ...")
     print(ClientIOHTTP().session)
 

@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import urllib
 from typing import Optional, Any
 
 from sanic import response
@@ -89,8 +90,9 @@ class FeatureResource(SpatialResource):
             print(err)
             return sanic.response.json({"Error": f"{err}"})
 
-    async def get_representation_given_path(self, id_or_key_value, a_path:str):
+    async def get_representation_given_path(self, id_or_key_value, a_path: str):
         try:
+            a_path = urllib.parse.unquote(a_path)
             accept = self.request.headers['accept']
             if CONTENT_TYPE_HTML in accept:
                 return await self.get_html_representation_given_path(id_or_key_value, a_path)

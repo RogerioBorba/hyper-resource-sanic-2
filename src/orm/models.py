@@ -95,6 +95,11 @@ class AlchemyBase(Base):
         return None
 
     @classmethod
+    def column_names_given(cls, attribute_names: list[str]) -> list[str]:
+        return [cls.column_name(name) for name in attribute_names]
+
+
+    @classmethod
     def class_given_relationship_fk(cls, inst_attr: InstrumentedAttribute):
         return inst_attr.prop.entity.class_
 
