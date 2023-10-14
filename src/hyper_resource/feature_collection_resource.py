@@ -21,6 +21,7 @@ from src.orm.database_postgis import DialectDbPostgis
 import os
 
 from src.orm.dictionary_actions_abstract_collection import action_name
+from src.orm.geo_sql_builder import GEOSASQLBuilder
 from src.orm.query_builder import QueryBuilder
 from src.orm.sa_sql_builder import SASQLBuilder
 from src.url_interpreter.interpreter_error import PathError
@@ -32,7 +33,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
     def __init__(self, request):
         super().__init__(request)
         self.extent = None
-
+        self.qb: GEOSASQLBuilder | None = None
     def get_geom_attribute(self) -> str:
         return self.entity_class().geo_attribute_name()
 
@@ -231,6 +232,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
             return sanic.response.json({"error: Error no banco"}, status=400)
 
     async def get_html_representation(self):
+
         html_filepath = os.path.join(SOURCE_DIR, "hyper_resource", "templates", "basic_geo.html")
         with open(html_filepath, "r") as body:
             html_content = body.read()
@@ -300,9 +302,22 @@ class FeatureCollectionResource(SpatialCollectionResource):
         except (RuntimeError, TypeError, NameError) as err:
             return sanic.response.json("Error {0}".format(err))
 
-    async def get_representation_given_path(self, path: str) -> str:
+    def sql_builder(self, path: str) -> GEOSASQLBuilder:
+        return GEOSASQLBuilder(resource=self, path=path, delimiter='/*/', prefix_column=self.protocol_host())
+
+    async def get_representation_given_path(self, path: str):
         try:
-            #return await self.get_representation_path(path)
+            a_path = urllib.parse.unquote(path)
+            self.qb = self.sql_builder(a_path)
+            await self.qb.select_statement()
+            return await self.response_by_saqb()
+        except PathError as err:
+            return sanic.response.json(err.message, err.code)
+        except (RuntimeError, TypeError, NameError) as err:
+            return sanic.response.json("Error {0}". format(err))
+
+    async def get_representation_given_path__(self, path: str) -> str:
+        try:
             path = urllib.parse.unquote(path)
             paths: list[str] = self.normalize_path_as_list(path, '/*/')
             qb: QueryBuilder = QueryBuilder(dialect_db=self.dialect_DB(), entity_class=self.entity_class())
@@ -419,10 +434,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
         rows_dict = await self.rows_as_dict(rows)
         return sanic.response.json(rows_dict or [])
 
-    async def response_by_qb(self, qb: QueryBuilder):
-        if qb.has_only_one_aggregate_math_function():
-            return sanic.response.json(await qb.count())
-
+    async def response_by_qb(self, qb):
         if CONTENT_TYPE_HTML in self.accept_type() and qb.has_geometry:
             return await self.get_html_representation()
 
@@ -452,6 +464,33 @@ class FeatureCollectionResource(SpatialCollectionResource):
             return sanic.response.raw(geom_wkb, content_type=CONTENT_TYPE_WKB)
         rows = await self.dialect_DB().fetch_all_by(qb.query())
         rows_dict = await self.rows_as_dict(rows)
+        return sanic.response.json(rows_dict or [])
+
+    async def response_by_saqb(self):
+        if CONTENT_TYPE_HTML in self.accept_type() and self.qb.projection_has_geometry():
+            return await self.get_html_representation()
+        if (CONTENT_TYPE_JSON in self.accept_type()) or (CONTENT_TYPE_GEOJSON in self.accept_type()):
+            rows_dict: list[dict] | object = await self.qb.fetch_all_as_json()
+            return sanic.response.json(rows_dict or [], content_type=CONTENT_TYPE_GEOJSON)
+        if CONTENT_TYPE_GEOBUF in self.accept_type():
+            geo_buf = await self.qb.fetch_all_as_geobuf()
+            if geo_buf is None:
+                return sanic.response.text('This query does not found any resource', status=404)
+            return sanic.response.raw(geo_buf or None, content_type=CONTENT_TYPE_GEOBUF)
+        if CONTENT_TYPE_FLATGEOBUFFERS in self.accept_type():
+            flat_geo_buffer = await self.qb.fetch_all_as_flatgeobuffers()
+            if flat_geo_buffer is None:
+                return sanic.response.text('This query does not found any resource', status=404)
+            return sanic.response.raw(flat_geo_buffer, content_type=CONTENT_TYPE_FLATGEOBUFFERS)
+        if CONTENT_TYPE_IMAGE_PNG in self.accept_type():
+            return await self.get_image_representation(self.qb.query())
+        if CONTENT_TYPE_WKB in self.accept_type():
+            geom_wkb = await self.qb.fetch_all_as_wkb()
+            if geom_wkb is None:
+                return sanic.response.text('This query does not found any resource', status=404)
+            return sanic.response.raw(geom_wkb, content_type=CONTENT_TYPE_WKB)
+
+        rows_dict = await self.qb.fetch_all_as_json()
         return sanic.response.json(rows_dict or [])
 
     async def response_by(self, query: str):

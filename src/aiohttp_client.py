@@ -1,8 +1,8 @@
+import aiohttp
+from sanic import Sanic
 from aiohttp import ClientSession
 
-
 aiohttp_session = None
-
 
 class Singleton(type):
     _instances = {}
@@ -16,3 +16,10 @@ class Singleton(type):
 
 class ClientIOHTTP(metaclass=Singleton):
     session: ClientSession = None
+
+    def get_session(self):
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+        return self.session
+    def set_session(self, a_session) -> None:
+        self.session = a_session

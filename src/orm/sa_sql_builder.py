@@ -2,7 +2,8 @@
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import InstrumentedAttribute
 from sqlalchemy.sql.functions import _FunctionGenerator
-from src.orm.query_builder_util import normalize_path_as_list, first_word, HYPER_OPERATION_NAMES
+from src.orm.query_builder_util import normalize_path_as_list, first_word, HYPER_OPERATION_NAMES, \
+    path_without_last_slash
 from src.orm.query_builder_util import comma_list_str_as_list, path_as_list
 from src.orm.query_builder_util import AVG, COLLECT, COUNT, FILTER, LIMIT, MAX, MIN, OFFSET, SUM
 from src.orm.query_builder_util import GROUPBY, OFFSETLIMIT, ORDERBY, PROJECTION
@@ -179,14 +180,14 @@ class SASQLBuilder:
 
     async def add_collect(self, path: str) -> None:
         self.has_collect = True
-        path_as_list: list[str] = path.split('/')
-        if len(path_as_list) < 3:
+        path_as_lst: list[str] = path_as_list(path)
+        if len(path_as_lst) < 3:
             raise PathError(message=f'Collect path, {path}, is incorrect', code=400)
-        attribute_name: str = path_as_list[1].strip().lower()
+        attribute_name: str = path_as_lst[1].strip().lower()
         if not self.entity_class().has_attribute(attribute_name):
             raise PathError(message=f'Attribute {attribute_name} does not exist', code=400)
         expr: str = await self.interpreter(path).translate_to_collect(path, protocol_host=self.resource.protocol_host())
-        label: str = f'{path_as_list[1]}_{path_as_list[-1]}'
+        label: str = f'{path_as_lst[1]}_{path_as_lst[-1]}'
         literal_col = literal_column(expr).label(label)
         self.projection.append(literal_col)
 
@@ -201,11 +202,11 @@ class SASQLBuilder:
         else:
             self.has_projection = False
             dif: set[str] = ext_attr_names.difference(self.attribute_names())
-            raise PathError(f"Error in {dif}", code=400)
+            raise PathError(f"Error in path {dif}", code=400)
 
     async def add_order_by(self, path: str) -> None:
         local_path_str: str = path.lower()
-        local_path: list[str] = local_path_str.split('/')  #path = orderby/valor&desc/
+        local_path: list[str] = path_as_list(local_path_str)  #path = orderby/valor&desc/
         attribute_order_str: str = local_path[1] #valor&desc
         attribute_order_list: list[str] = attribute_order_str.split('&')
         attribute_names: list[str] = attribute_order_list[0].split(',')
@@ -234,8 +235,8 @@ class SASQLBuilder:
 
     async def add_count(self, path: str) -> None:
         self.has_count = True
-        a_path = path.split("/")
-        a_func = func.count(a_path[1]) if len(a_path) >= 2 else func.count()
+        path_list: list[str] = path_as_list(path)
+        a_func = func.count(path_list[1]) if len(path_list) >= 2 else func.count()
         self.projection.append(a_func)
 
     async def add_group_by(self, path: str) -> None:
@@ -336,22 +337,6 @@ class SASQLBuilder:
         qtd = await self.fetch_one()
         return qtd if qtd is not None else 0
 
-    async def fetch_all_as_geobuf(self):
-        a_query: str = self.dialect_db().geobuf_query(self.query())
-        rows = await self.dialect_db().fetch_all_by(a_query)
-        if rows:
-            row = rows[0]
-            return row._mapping['st_asgeobuf']
-        return None
-
-    async def fetch_all_as_flatgeobuffers(self):
-        a_query: str = self.dialect_db.flatgeobuf_query(self.query())
-        rows = await self.dialect_db.fetch_all_by(a_query)
-        if len(rows):
-            row = rows[0]
-            return row._mapping['st_asflatgeobuf']
-        None
-
     async def execute_operation(self,  path: str) -> None:
         """Executes the operation in path to add statement in Select object
 
@@ -404,6 +389,13 @@ class SASQLBuilder:
         """
         return [name for name, attrib in self.entity_class().attributes_with_dereferenceable()]
 
+    def column_name_given(self, attribute_name: str) -> str:
+        """Returns the column name´s, given entity_class attribute name´s
+        Parameters:
+            attribute_name (str) - The attribute name´s
+        Returns  (str)
+        """
+        return self.entity_class().column_name(attribute_name)
 
     def operation_name_in_path(self, path: str) -> str:
         operation_name_or_attribute_comma: str = first_word(path)
@@ -465,10 +457,16 @@ class SASQLBuilder:
         if attr_names:
             attributes = [self.entity_class().__dict__[name] for name in attr_names if name in self.entity_class().__dict__.keys()]
         else:
-            attributes = [ attr for name, attr in  self.entity_class().attributes_with_dereferenceable()]
+            attributes = [ attr for name, attr in self.entity_class().attributes_with_dereferenceable()]
         list_col = []
         for att in attributes:
             col: Column | None = self.alias_column(att)
             if col is not None:
                 list_col.append(col)
         return list_col
+
+    def query(self) -> str:
+        return str(self.get_select().compile(bind=self.db(), compile_kwargs={"literal_binds": True}))
+
+    def subquery(self):
+        return self.get_select().subquery().compile(bind=self.db(), compile_kwargs={"literal_binds": True})

@@ -141,6 +141,21 @@ class AbstractCollectionResource(AbstractResource):
         operation_name = self.operation_name_in_path(path)
         return await getattr(self, action_name(operation_name))(*[path])
 
+    async def response_by_qb(self, qb: QueryBuilder):
+        if (CONTENT_TYPE_JSON in self.accept_type()):
+            rows = await self.dialect_DB().fetch_all_by(qb.query())
+            rows_dict = await self.rows_as_dict(rows)
+            if qb.has_only_one_aggregate_math_function():
+                key, value = rows_dict[0].popitem()
+                return sanic.response.json(value)
+            return sanic.response.json(rows_dict or [], content_type=CONTENT_TYPE_JSON)
+
+        rows = await self.dialect_DB().fetch_all_by(qb.query())
+        rows_dict = await self.rows_as_dict(rows)
+        if qb.has_only_one_aggregate_math_function():
+            key, value = rows_dict[0].popitem()
+            return sanic.response.json(value)
+        return sanic.response.json(rows_dict or [])
 
     async def add_where_in_qb(self, qb: QueryBuilder, path: str):
         qb.add_where(await self.interpreter(path[6:]).translate_lookup())
@@ -217,19 +232,53 @@ class AbstractCollectionResource(AbstractResource):
             raise PathError(msg, 400)
         return await qb_function[operation_name](*[qb, path])
 
-    def sql_builder(self, path: str) -> SASQLBuilder:
-        return SASQLBuilder(resource=self, path=path, delimiter='/*/', prefix_column=self.protocol_host())
-
     async def get_representation_given_path(self, path: str):
         try:
             a_path: str = urllib.parse.unquote(path)
-            qb: SASQLBuilder = self.sql_builder(a_path)
+            qb: SASQLBuilder = SASQLBuilder(resource=self, path=a_path, delimiter='/*/', prefix_column=self.protocol_host())
             res = await qb.execute_statement()
             return sanic.response.json(res)
         except PathError as err:
             return sanic.response.json(err.message, err.code)
         except (RuntimeError, TypeError, NameError) as err:
             return sanic.response.json("Error {0}".format(err))
+
+    async def get_representation_given_path___(self, path: str) -> str:
+        try:
+            path = urllib.parse.unquote(path)
+            return await self.get_representation_path(path)
+            paths: list[str] = self.normalize_path_as_list(path, '/*/')
+            qb: QueryBuilder = QueryBuilder(dialect_db=self.dialect_DB(), entity_class=self.entity_class())
+            qb.has_geometry = False
+            for path in paths:
+                await self.execute_qb_function(qb, path)
+            qb.add_table_name(self.dialect_DB().schema_table_name())
+            return await self.response_by_qb(qb)
+        except PathError as err:
+            return sanic.response.json(err.message, err.code)
+        except (RuntimeError, TypeError, NameError) as err:
+            return sanic.response.json("Error {0}". format(err))
+
+    async def get_representation_given_path_old(self, path: str):
+        # result = getattr(foo, 'bar')(*params)
+        #path = self.normalize_path(a_path)
+        try:
+            operation_name_or_attribute_comma = self.first_word(path)
+            if operation_name_or_attribute_comma in self.get_function_names():
+                return await getattr(self, action_name(operation_name_or_attribute_comma))(*[path])
+            else:
+                att_names = set(operation_name_or_attribute_comma.split(','))
+                atts = att_names.difference(set(self.attribute_names()))
+                if len(atts) ==1 :
+                   return sanic.response.json(f"The operation or attribute in this {list(atts)} does not exists", status=400)
+                elif len(atts) > 1:
+                    return sanic.response.json(f"The operations or attributes {list(atts)} do not exists",
+                                               status=400)
+                return await self.projection(path)
+
+        except (RuntimeError, TypeError, NameError) as err:
+            print(err)
+            raise
 
     async def response_fetch_all(self, list_attribute: Optional[List] = None, where: Optional[str] = None, order_by: Optional[str] = None, prefix: Optional[str] = None):
         rows = await self.dialect_DB().fetch_all(list_attribute=list_attribute, where=where, order_by=order_by, prefix=self.protocol_host())

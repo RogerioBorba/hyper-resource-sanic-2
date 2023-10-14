@@ -12,7 +12,6 @@ from src.routes.entry_point import api_entry_point
 from src.routes.setup_routes import setup_all_routes
 # Create Sanic app
 app = Sanic(__name__)
-ClientIOHTTP()
 
 # Setup env
 env = Env()
@@ -30,7 +29,7 @@ setup_all_routes(app)
 async def init_session(app, loop):
     print('after_server_start')
     app.ctx.aiohttp_session = aiohttp.ClientSession(loop=loop)
-    ClientIOHTTP().session = app.ctx.aiohttp_session #aiohttp.ClientSession(loop=loop)  # app.aiohttp_session
+    ClientIOHTTP().set_session(app.ctx.aiohttp_session) #aiohttp.ClientSession(loop=loop)  # app.aiohttp_session
     print("Initializing ClientIOHTTP ...")
     print(ClientIOHTTP().session)
 

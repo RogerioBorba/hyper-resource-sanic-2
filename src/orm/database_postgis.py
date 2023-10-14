@@ -235,7 +235,7 @@ class DialectDbPostgis(DialectDbPostgresql):
 
     async def convert_geometry_from_request(self, url: str, accept: str = CONTENT_TYPE_WKB) -> str:
         headers = {'accept': accept}
-        async with ClientIOHTTP().session.get(url, headers=headers) as resp:
+        async with ClientIOHTTP().get_session().get(url, headers=headers) as resp:
             if resp.content_type == CONTENT_TYPE_WKB:
                 geom = await resp.read()
                 #geom_encoded = wkb.loads(geom.decode(), hex=True)

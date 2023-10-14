@@ -34,6 +34,11 @@ class AlchemyBase(Base):
         return cls.__table__.name
 
     @classmethod
+    def full_table_name(cls) -> str:
+        schema = cls.schema() + '.' if (cls.schema() is not None and len(cls.schema()) > 0) else ''
+        return schema + cls.__table__.name
+
+    @classmethod
     def primary_key(cls) -> str:
         return cls.__table__.primary_key.columns[0].name
 

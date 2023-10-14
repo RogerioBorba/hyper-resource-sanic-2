@@ -106,10 +106,17 @@ def path_without_last_slash(path: str) -> str:
         Return a string without last slash if it exists.
 
         Parameters:
-            path(str) - path have to be a clause sql. Ex.: orderby/name/ => orderby/name
+            path(str) - path have to be a clause sql.
+            Ex.: orderby/name/ => orderby/name
+            orderby/(/https://server/api/state/23/name/)/ => orderby/(/https://server/api/state/23/name/)/
         Returns a (str)
     """
-    return path if path[-1] != '/' else path[:-1]
+    if path[-1] != '/':
+        return path
+    if path[:-1] == '/' and path[:-2] == ')':
+        return path
+    else:
+        return path[:-1]
 
 
 def path_as_list(path: str, ignore_last_slash: bool = True, splitter: str = '/') -> list[str]:
