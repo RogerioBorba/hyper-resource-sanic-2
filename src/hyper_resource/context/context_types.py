@@ -6,7 +6,7 @@ import copy
 from sqlalchemy import ARRAY, BIGINT, CHAR, BigInteger, BINARY, BLOB, BOOLEAN, CLOB, DATE, \
     DATETIME, DateTime, DECIMAL, Enum, Column, FLOAT, Float, INT, INTEGER, Integer, JSON, LargeBinary, NCHAR, NUMERIC, \
     Numeric, NVARCHAR, PickleType, REAL, SMALLINT, SmallInteger, String, TEXT, Text, TIME, Time, TIMESTAMP, \
-    TypeDecorator, Unicode, UnicodeText, VARBINARY, VARCHAR, Date
+    TypeDecorator, Unicode, UnicodeText, VARBINARY, VARCHAR, Date, Double, DOUBLE
 
 PREFIX_SCHEMAORG = "schema"
 SQLALCHEMY_SCHEMA_ORG_TYPES = {
@@ -25,6 +25,8 @@ SQLALCHEMY_SCHEMA_ORG_TYPES = {
     DATETIME:       None,
     DateTime:       None,
     DECIMAL:        f"{PREFIX_SCHEMAORG}:Float",
+    Double:          f"{PREFIX_SCHEMAORG}:Float",
+    DOUBLE:          f"{PREFIX_SCHEMAORG}:Float",
     Enum:           None,
     Column:         None,
     FLOAT:          f"{PREFIX_SCHEMAORG}:Float",

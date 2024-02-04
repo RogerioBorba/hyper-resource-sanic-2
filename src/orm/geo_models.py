@@ -150,12 +150,13 @@ class AlchemyGeoBase(AlchemyBase):
         dic = dic_action #{cls: cls.actions_to_dissemination()}
         dic.update(super().action_dic())
         return dic
+
     def yourself_action(self):
         return {
             'transform': ActionFunction('transform','transform', Geometry, [ParamAction('srid', int)]),
-            'buffer': ActionFunction('transform','transform', Geometry, [ParamAction('srid', int)]),
+            'buffer': ActionFunction('buffer','buffer', Geometry, [ParamAction('value', float)]),
             'area': ActionFunction('area', 'area',float, [ParamAction('srid', int, False)]),
-            'bbox': ActionFunction('bbox', 'bbox', [], []),
+            'bbox': ActionFunction('bbox', 'bbox'),
 
         }
     @classmethod

@@ -261,6 +261,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
     async def get_wkb_representation(self, where: str | None = None, order_by: str | None = None) -> Row:
         #rows = await self.dialect_DB().fetch_all_as_wkb(where=where, order_by=order_by)
         query_wkb: str = self.dialect_DB().query_wkb(where=where, order_by=order_by)
+
         async def streaming_fn(response):
             async for row in self.dialect_DB().db.iterate(query_wkb):
                 await response.write(row['st_asbinary'])

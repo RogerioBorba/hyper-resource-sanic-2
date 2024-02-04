@@ -4,6 +4,7 @@ from aiohttp import ClientSession
 
 aiohttp_session = None
 
+
 class Singleton(type):
     _instances = {}
 
@@ -18,8 +19,10 @@ class ClientIOHTTP(metaclass=Singleton):
     session: ClientSession = None
 
     def get_session(self):
+        return aiohttp.ClientSession()
         if self.session is None:
             self.session = aiohttp.ClientSession()
         return self.session
+
     def set_session(self, a_session) -> None:
         self.session = a_session

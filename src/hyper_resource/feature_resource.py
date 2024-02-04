@@ -164,8 +164,14 @@ class FeatureResource(SpatialResource):
     async def get_wkb_representation_given_path(self, id_or_key_value, a_path: str):
         try:
             model = await self.dialect_DB().fetch_one_model(id_or_key_value)
+            method_name: str = a_path.split('/')[0]
             if self.entity_class().starts_by_one_attribute_with_functions(a_path):
+                if model.has_action(method_name):
+                    a_path = model.geo_attribute_name() + '/' + a_path
                 res = await model.execute_attribute_given(a_path)
+                result = res.wkb
+            elif model.has_action(method_name):
+                res = await model.execute_attribute_given(model.geo_attribute_name() + '/' + a_path)
                 result = res.wkb
             else:
                 result = (wkb.loads(model.get_geom(), hex=True)).wkb

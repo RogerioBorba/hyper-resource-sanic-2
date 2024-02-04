@@ -14,10 +14,15 @@ def unidade_federacao_a_routes(app):
         r = UnidadeFederacaoAResource( request )
         return await r.get_representation( ('geocodigo', geocodigo) )
 
-    @app.route('unidade-federacao-a-list/<sigla:[a-zA-Z]{2}>')
+    @app.route('/unidade-federacao-a-list/<sigla:[a-zA-Z]{2}>')
     async def lim_unidade_federacao_a_sigla(request, sigla):
         r = UnidadeFederacaoAResource( request )
-        return await r.get_representation( ('sigla', sigla) )
+        return await r.get_representation( ('sigla', sigla))
+
+    @app.route('/unidade-federacao-a-list/<sigla:[a-zA-Z]{2}>/<path:path>')
+    async def lim_unidade_federacao_a_sigla_path(request, sigla, path):
+        r = UnidadeFederacaoAResource(request)
+        return await r.get_representation_given_path(('sigla', sigla), path)
 
     @app.route(UnidadeFederacaoAResource.router_id_path())
     async def unidade_federacao_a_resource_id_path(request, id, path):
