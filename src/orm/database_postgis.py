@@ -58,7 +58,7 @@ class DialectDbPostgis(DialectDbPostgresql):
 
     def wkb_query(self, sub_query: str) -> str:
         geom: str = self.get_geom_column()
-        return f"SELECT ST_AsBinary({geom}) FROM ({sub_query}) AS q"
+        return f"SELECT {geom} FROM ({sub_query}) AS q"
 
     def geobuf_query(self, sub_query: str) -> str:
         geom: str = self.get_geom_column()

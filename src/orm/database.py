@@ -15,13 +15,14 @@ from src.orm.models import AlchemyBase
 
 
 class AbstractDialectDatabase:
-    def __init__(self, db: Engine | AsyncEngine):
-        self.db = db
+    def __init__(self):
+        pass
 
 
 class DialectDatabase(AbstractDialectDatabase):
     def __init__(self, db: Engine | AsyncEngine, metadata_table: Table | None = None, entity_class: type[AlchemyBase] | None = None):
-        super().__init__(db)
+        super().__init__()
+        self.db = db
         self.metadata_table = metadata_table if metadata_table is not None else entity_class.__table__
         self.entity_class = entity_class
 

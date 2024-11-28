@@ -24,6 +24,8 @@ class GEOSASQLBuilder(SASQLBuilder):
         return geo_name in projection
 
     async def rows_as_dict(self, rows):
+        if len(rows) == 0:
+            return []
         response_data: list = []
         geom_attribute: str = self.geom_attribute_name()
         a_row: Row = rows[0]

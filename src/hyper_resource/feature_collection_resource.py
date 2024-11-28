@@ -189,12 +189,16 @@ class FeatureCollectionResource(SpatialCollectionResource):
         a_query: str = self.dialect_DB().wkb_query(query)
         extent = await self.get_extent(query)
         rows: list[Row] = await self.dialect_DB().fetch_all_by(a_query)
-        geometries = [shapely.wkb.loads(row._mapping['st_asbinary']) for row in rows]
-        if len(geometries) > 0 and (type(geometries[0]) == MultiPolygon or type(geometries[0]) == Polygon):
+        geometries = [shapely.from_wkb(row)[0] for row in rows]
+        res = []
+        if len(geometries) == 0:
+            return sanic.response.raw(res, content_type=CONTENT_TYPE_IMAGE_PNG)
+        type_geometry = type(geometries[0])
+        if  type_geometry == MultiPolygon or type_geometry == Polygon:
             res = await self.polygon_as_figure(geometries, extent)
-        elif len(geometries) > 0 and (type(geometries[0]) == LineString or type(geometries[0]) == MultiLineString):
+        elif type_geometry == LineString or type_geometry == MultiLineString:
             res = await self.linestring_as_figure(geometries, extent)
-        elif len(geometries) > 0 and (type(geometries[0]) == Point or type(geometries[0]) == MultiPoint):
+        elif type_geometry == Point or type_geometry == MultiPoint:
             res = await self.point_as_figure(geometries, extent)
 
         return sanic.response.raw(res, content_type=CONTENT_TYPE_IMAGE_PNG)

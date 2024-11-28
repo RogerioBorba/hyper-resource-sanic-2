@@ -21,8 +21,8 @@ dic_geometry_action = {
         'simplify': ActionFunction('simplify', 'ST_Simplify',  Geometry, [ParamAction('tolerance', float), ParamAction('preserve_topology', bool)], 'Returns a "simplified" version of the given geometry using the Douglas-Peucker algorithm.'),
         'symmetric_difference': ActionFunction('symmetric_difference', 'ST_SymDifference',  Geometry, [ParamAction('other', Geometry)], 'Returns a geometry representing the portions of geometries A and B that do not intersect.'),
         'transform': ActionFunction('transform', 'ST_Transform',  Geometry, [ParamAction('srid', int)], 'Returns a new geometry with its coordinates transformed to a different spatial reference system.'),
-        'wkb': ActionFunction('wkb', 'to_wkb', str),
-        'wkt': ActionAttribute('wkt', str)
+        'wkb': ActionFunction('wkb', ' ST_AsBinary', str,[ParamAction('other', Geometry)]),
+        'wkt': ActionFunction('wkt', 'ST_AsText', str, [ParamAction('other', Geometry)])
 }
 representations = [CONTENT_TYPE_GEOJSON, CONTENT_TYPE_GEOBUF]
 dic_spatial_lookup_action: Dict[str, ActionFunction] = {
