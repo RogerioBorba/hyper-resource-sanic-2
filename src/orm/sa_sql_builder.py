@@ -352,7 +352,9 @@ class SASQLBuilder:
         if operation_name not in self.dict_all_operation().keys():
             msg: str = f"Error in path. This {operation_name} does not exists"
             raise PathError(msg, 400)
-        return await self.dict_all_operation()[operation_name](*[path])
+        function_to_execute = self.dict_all_operation()[operation_name]
+        await function_to_execute(*[path])
+
 
     def get_operation_names(self) -> list[str]:
         """Returns a list of function names. Each type of resource has different functions

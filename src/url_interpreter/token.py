@@ -217,12 +217,12 @@ class TokenBetween(Token):
 
 
 class TokenValue(Token):
-    async def translate(self, translated: str = None, model_class: Optional[AlchemyBase] = None,
+    """async def translate(self, translated: str = None, model_class: Optional[AlchemyBase] = None,
                         db: Optional[DialectDatabase] = None) -> str:
         tp: type = await self.returned()
         obj = await db.value_db_converted(self.word(), tp)
         return f'{obj} '
-
+    """
     async def returned(self) -> Optional[type]:
         return await self.prev_token.returned()
 
@@ -245,8 +245,11 @@ class TokenValue(Token):
                 return f'{self.word()} '
             instr_attrb = model_class.__dict__[tk_attribute.word()]
             if model_class.is_foreign_key_attribute(instr_attrb):
-                      return self.last_word_in_url()
-        return f'{self.word()} '
+                return self.last_word_in_url()
+        tp: type = await self.returned()
+        obj = await db.value_db_converted(self.word(), tp)
+        return f'{obj}'
+        #return f'{self.word()} '
 
 class TokenRelationalOperator(Token):
     async def translate(self, translated: str = None, model_class: Optional[AlchemyBase] = None,  db: Optional[DialectDatabase] = None) -> str:
