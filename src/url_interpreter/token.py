@@ -249,7 +249,7 @@ class TokenValue(Token):
         tp: type = await self.returned()
         obj = await db.value_db_converted(self.word(), tp)
         return f'{obj}'
-        #return f'{self.word()} '
+
 
 class TokenRelationalOperator(Token):
     async def translate(self, translated: str = None, model_class: Optional[AlchemyBase] = None,  db: Optional[DialectDatabase] = None) -> str:
