@@ -1,5 +1,5 @@
 import aiohttp
-from sanic import Sanic, response
+from sanic import Sanic, response,text
 from sanic.request import Request
 from environs import Env
 from src.orm.database_postgresql import DialectDbPostgresql
@@ -7,6 +7,8 @@ from tests.fixtures.aiohttp_client import ClientIOHTTP
 from tests.fixtures.hyper_resource.resources.setup_resources import setup_all_resources
 from tests.fixtures.hyper_resource.routes.entry_point import api_entry_point
 from tests.fixtures.hyper_resource.routes.setup_routes import setup_all_routes
+import os
+
 # Create Sanic app
 app = Sanic(__name__)
 
@@ -22,7 +24,6 @@ access_log: bool = env.bool("ACESS_LOG", False)
 
 # Setup all routes
 setup_all_routes(app)
-
 
 @app.listener("before_server_start")
 async def init_session(app, loop):
@@ -56,5 +57,7 @@ async def connect_to_db(*args, **kwargs):
 
 if __name__ == "__main__":
     print(f"Starting server at port: {port}")
-    setup_all_resources()
+    diretorio_atual = os.getcwd()
+    print(f"Diretório em execução: {diretorio_atual}")
+    #setup_all_resources()
     app.run(host=host, port=port, debug=True, access_log=True, auto_reload=True)

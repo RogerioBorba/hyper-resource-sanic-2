@@ -3,7 +3,6 @@ from src.middlewares.security import authentication,permission
 from src.resources.unidade_federacao_a import UnidadeFederacaoAResource, UnidadeFederacaoACollectionResource
 
 def unidade_federacao_a_routes(app):
-    @app.route('unidade-federacao-a-list/<geocodigo:[0-9]{2}>/')
     @app.route('unidade-federacao-a-list/<geocodigo:[0-9]{2}>')
     async def lim_unidade_federacao_a_geocodigo(request, geocodigo):
         r = UnidadeFederacaoAResource( request )

@@ -92,6 +92,8 @@ class DialectDbPostgis(DialectDbPostgresql):
         query: str = f"SELECT ST_Extent({self.get_geom_column()}) FROM ({sub_query or self.schema_table_name()}) AS q"
         rows: list = await self.fetch_all_by(query)
         s: str = rows[0]._mapping['st_extent']
+        if s is None:
+            return []
         coords = s.removeprefix('BOX(').removesuffix(')').split(',')[0].split(' ') + \
                  s.removeprefix('BOX(').removesuffix(')').split(',')[1].split(' ')
         return [float(coord) for coord in coords]

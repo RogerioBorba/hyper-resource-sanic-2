@@ -1,6 +1,4 @@
-import io
 import urllib
-
 import matplotlib.pyplot as plt
 import time
 from typing import List, Tuple, Optional, Dict
@@ -15,6 +13,7 @@ import sanic
 from src.hyper_resource.common_resource import CONTENT_TYPE_HTML, CONTENT_TYPE_OCTET_STREAM, CONTENT_TYPE_GEOBUF, \
     CONTENT_TYPE_WKB, CONTENT_TYPE_VECTOR_TILE, CONTENT_TYPE_JSON, CONTENT_TYPE_GEOJSON, \
     CONTENT_TYPE_FLATGEOBUFFERS, CONTENT_TYPE_IMAGE_PNG
+from src.hyper_resource.feature_utils import geometry_as_figure
 from src.hyper_resource.spatial_collection_resource import SpatialCollectionResource
 from src.orm.action_type import ActionFunction
 from src.orm.database_postgis import DialectDbPostgis
@@ -113,45 +112,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
         feature_collection["features"] = response_data
         return feature_collection
 
-    async def linestring_as_figure(self, geometries: List, extent: List[float]):
-        #fig = plt.figure()
-        # fig.set_visible(False)
-        ax = plt.axes(projection=ccrs.PlateCarree(),  frameon=False)
-        #ax = fig.add_axes([0, 0, 1, 1], projection=ccrs.PlateCarree(), frameon=False)
-        #ext: List[float] = await self.get_extent()
-        ax.set_extent(extent, ccrs.PlateCarree())
-        ax.patch.set_visible(False)
-        ax.add_geometries(geometries, ccrs.PlateCarree(), facecolor='none',  edgecolor="black")
-        b = io.BytesIO()
-        plt.savefig(b, format='png')
-        plt.close()
-        return b.getvalue()
 
-    async def polygon_as_figure(self, geometries: List, extent: List[float]):
-        #fig = plt.figure()
-        # fig.set_visible(False)
-        #ax = fig.add_axes([0, 0, 1, 1], projection=ccrs.PlateCarree(), frameon=False)
-        ax = plt.axes(projection=ccrs.PlateCarree(), frameon=False)
-        #ax.set_extent([-74.018, -28.877, -33.742, 5.2672], ccrs.PlateCarree())
-        #ext: List[float] = await self.get_extent()
-        ax.set_extent(extent, ccrs.PlateCarree())
-        ax.add_geometries(geometries, ccrs.PlateCarree(), facecolor='#C8A2C8', alpha=0.5, edgecolor="black")
-        b = io.BytesIO()
-        plt.savefig(b, format='png')
-        plt.close()
-        return b.getvalue()
-
-    async def point_as_figure(self, geometries: List, extent: List[float]):
-        ax = plt.axes(projection=ccrs.PlateCarree(), frameon=False)
-        #ext: List[float] = await self.get_extent()
-        ax.set_extent(extent, ccrs.PlateCarree())
-        #ax.patch.set_visible(False)
-        for point in geometries:
-            plt.plot(point.x, point.y,  markersize=1, marker='o', color='b', transform=ccrs.PlateCarree())
-        b = io.BytesIO()
-        plt.savefig(b, format='png')
-        plt.close()
-        return b.getvalue()
 
     async def add_collect_in_qb(self, qb, path):
         if not qb.has_geometry and self.has_geometry_in_collect(path):
@@ -193,14 +154,7 @@ class FeatureCollectionResource(SpatialCollectionResource):
         res = []
         if len(geometries) == 0:
             return sanic.response.raw(res, content_type=CONTENT_TYPE_IMAGE_PNG)
-        type_geometry = type(geometries[0])
-        if  type_geometry == MultiPolygon or type_geometry == Polygon:
-            res = await self.polygon_as_figure(geometries, extent)
-        elif type_geometry == LineString or type_geometry == MultiLineString:
-            res = await self.linestring_as_figure(geometries, extent)
-        elif type_geometry == Point or type_geometry == MultiPoint:
-            res = await self.point_as_figure(geometries, extent)
-
+        res = await geometry_as_figure(geometries, extent)
         return sanic.response.raw(res, content_type=CONTENT_TYPE_IMAGE_PNG)
 
     async def get_json_representation(self):

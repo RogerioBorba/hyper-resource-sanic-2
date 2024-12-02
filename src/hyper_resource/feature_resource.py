@@ -1,30 +1,32 @@
 import json
 import os
-import time
 import urllib
 from typing import Optional, Any
-
+import time
+import shapely
 from sanic import response
 from shapely import wkb
-
+from shapely.geometry import Point, LineString, Polygon, MultiPolygon, MultiPoint, MultiLineString
+from sqlalchemy import Row
 from settings import SOURCE_DIR
 from src.hyper_resource import feature_utils
-from ..hyper_resource.common_resource import *
-
 from src.hyper_resource.common_resource import *
-from src.hyper_resource.context.geocontext import GeoDetailContext
+from src.hyper_resource.feature_utils import polygon_as_figure, linestring_as_figure, point_as_figure, \
+    geometry_as_figure
 from src.hyper_resource.spatial_resource import SpatialResource
 import sanic
 
 from src.orm.database_postgis import DialectDbPostgis
+
 MIME_TYPE_JSONLD = "application/ld+json"
+
 
 class FeatureResource(SpatialResource):
     def __init__(self, request):
         super().__init__(request)
 
     def dialect_DB(self) -> DialectDbPostgis:
-          return DialectDbPostgis(self.request.app.ctx.db, self.metadata_table(), self.entity_class())
+        return DialectDbPostgis(self.request.app.ctx.db, self.metadata_table(), self.entity_class())
 
     def serialize_as_geojson(self, raw_data) -> dict:
         geometry = raw_data[self.dialect_DB().get_geom_column()]
@@ -40,6 +42,7 @@ class FeatureResource(SpatialResource):
         data = await self.dialect_DB().fetch_one_as_json(id_or_key_value)
         serialized = self.serialize_as_geojson(data)
         return sanic.response.json(serialized)
+
     """"
     async def get_html_representation(self, id_or_key_value):
         row = await self.dialect_DB().fetch_one_as_json(id_or_key_value)
@@ -48,7 +51,7 @@ class FeatureResource(SpatialResource):
         return sanic.response.text(row, content_type='application/json')
     """
 
-    def set_html_variables(self, html_content:str)-> str:
+    def set_html_variables(self, html_content: str) -> str:
         return feature_utils.set_html_variables(
             html_content, self.metadata_table().name,
             json.dumps(
@@ -75,6 +78,24 @@ class FeatureResource(SpatialResource):
         j_d = model.json_dict(model.__class__.attribute_names())
         return sanic.response.json(j_d)
 
+    async def get_image_representation(self, id_or_key_value):
+
+        if isinstance(id_or_key_value, tuple):
+            tup = id_or_key_value
+        else:
+            tup = (self.entity_class().primary_key(), id_or_key_value)
+
+        a_query: str = self.dialect_DB().basic_select_one_by_key_value(tup)
+        query: str = self.dialect_DB().wkb_query(a_query)
+        rows: list[Row] = await self.dialect_DB().fetch_all_by(query)
+        geometries = [shapely.from_wkb(row)[0] for row in rows]
+        if len(geometries) == 0:
+            return sanic.response.raw({}, content_type=CONTENT_TYPE_JSON)
+        extent = await self.dialect_DB().extent(query)
+
+        res = await geometry_as_figure(geometries, extent)
+        return sanic.response.raw(res, content_type=CONTENT_TYPE_IMAGE_PNG)
+
     async def get_representation(self, id_or_key_value: Optional[Any] = None):
         if type(id_or_key_value) == tuple:
             self.entity_class()
@@ -84,6 +105,8 @@ class FeatureResource(SpatialResource):
                 return await self.get_html_representation(id_or_key_value)
             elif CONTENT_TYPE_WKB in accept:
                 return await self.get_wkb_representation(id_or_key_value)
+            elif CONTENT_TYPE_IMAGE_PNG in accept:
+                return await self.get_image_representation(id_or_key_value)
             else:
                 return await self.get_json_representation(id_or_key_value)
         except (Exception, SyntaxError, NameError) as err:
@@ -121,7 +144,7 @@ class FeatureResource(SpatialResource):
             self.entity_class().validate_path(a_path)
             if self.entity_class().is_only_attribute_list_from_path(a_path):
                 model = await self.dialect_DB().fetch_one_model(id_or_key_value)
-                attributes_from_path = [ att.strip() for att in a_path.split('/')[0].split(',')]
+                attributes_from_path = [att.strip() for att in a_path.split('/')[0].split(',')]
                 dic = model.json_dict(attributes_from_path)
                 res = dic if len(dic) > 1 else dic.popitem()[1]
                 return sanic.response.json(res)
@@ -195,7 +218,8 @@ class FeatureResource(SpatialResource):
         diff_atts = att_names.difference(set(self.attribute_names()))
 
         if len(diff_atts) == 1:
-            return sanic.response.json(f"The operation or attribute in this {list(diff_atts)} does not exists", status=400)
+            return sanic.response.json(f"The operation or attribute in this {list(diff_atts)} does not exists",
+                                       status=400)
         elif len(diff_atts) > 1:
             return sanic.response.json(f"The operations or attributes {list(diff_atts)} do not exists", status=400)
 

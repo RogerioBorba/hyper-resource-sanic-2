@@ -14,7 +14,8 @@ def unidade_federacao_a_routes(app):
         r = UnidadeFederacaoAResource( request )
         return await r.get_representation( ('geocodigo', geocodigo) )
 
-    @app.route('/unidade-federacao-a-list/<sigla:[a-zA-Z]{2}>')
+
+    @app.route('/unidade-federacao-a-list/<sigla:[A-z]{2}>', strict_slashes=False)
     async def lim_unidade_federacao_a_sigla(request, sigla):
         r = UnidadeFederacaoAResource( request )
         return await r.get_representation( ('sigla', sigla))

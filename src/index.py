@@ -6,7 +6,6 @@ from environs import Env
 
 from src.aiohttp_client import ClientIOHTTP
 from src.orm.database_postgresql import DialectDbPostgresql
-#from src.routes.municipio.populacao.ano_22 import resource
 from src.resources.setup_resources import setup_all_resources
 from src.routes.entry_point import api_entry_point
 from src.routes.setup_routes import setup_all_routes
@@ -22,8 +21,16 @@ debug: bool =env.bool("DEBUG", False)
 access_log: bool = env.bool("ACESS_LOG", False)
 
 
+
+
 # Setup all routes
 setup_all_routes(app)
+
+async def handler(request):
+    return text("OK")
+app.add_route(handler, "/test")
+
+
 
 @app.listener("after_server_start")
 async def init_session(app, loop):
@@ -44,10 +51,13 @@ def handle_request(request: Request):
     # return response.json(api_entry_point())
     return response.json( api_entry_point(), headers=_headers, status=200 )
 
+@app.get("/foo")
+async def foo_handler(request: Request):
+    print("ENTREIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII")
+    return text("I said foo!")
 
 @app.listener("after_server_start")
 async def connect_to_db(*args, **kwargs):
-
     if env.bool("HAS_DATABASE", False):
         from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
         print("after_server_start initialize Database")
@@ -58,5 +68,5 @@ async def connect_to_db(*args, **kwargs):
 
 if __name__ == "__main__":
     print(f"Starting server at port: {port}")
-    setup_all_resources()
+    #setup_all_resources()
     app.run(host=host, port=port, debug=True, access_log=True, auto_reload=True)
