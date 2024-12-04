@@ -27,7 +27,9 @@ def {file_name}_routes(app):
     @app.route({class_name}Resource.router_id_path())
     async def {file_name}_resource_id_path(request, id, path):
         r = {class_name}Resource(request)
-        return await r.get_representation_given_path(id, path)
+        if path:
+            return await r.get_representation_given_path(id, path)
+        return await r.get_representation(id)    
 
     @app.route({class_name}Resource.router_id(), methods=['HEAD'])
     async def head_{file_name}_id(request, id):
@@ -37,8 +39,10 @@ def {file_name}_routes(app):
     @app.route({class_name}Resource.router_id_path(), methods=['HEAD'])
     async def head_{file_name}_resource_id_path(request, id, path):
         r = {class_name}Resource(request)
-        return await r.head_given_path(id, path)
-    
+        if path:
+            return await r.head_given_path(id, path)
+        return await r.head(id)
+        
     @app.route({class_name}Resource.router_id(), methods=['OPTIONS'])
     async def options_{file_name}_id(request, id):
         r = {class_name}Resource(request)
@@ -47,7 +51,9 @@ def {file_name}_routes(app):
     @app.route({class_name}Resource.router_id_path(), methods=['OPTIONS'])
     async def options_{file_name}_resource_id_path(request, id, path):
         r = {class_name}Resource(request)
-        return await r.options_given_path(id, path)
+        if path:
+            return await r.options_given_path(id, path)
+        return await r.options(id)
             
     @app.route({class_name}CollectionResource.router_list())
     async def {file_name}_list(request):

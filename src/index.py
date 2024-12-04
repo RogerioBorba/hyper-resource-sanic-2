@@ -1,7 +1,7 @@
 import aiohttp
 from sanic import Sanic, response
 from sanic.request import Request
-from sanic.response import text
+from sanic.response import text, json
 from environs import Env
 
 from src.aiohttp_client import ClientIOHTTP
@@ -21,15 +21,23 @@ debug: bool =env.bool("DEBUG", False)
 access_log: bool = env.bool("ACESS_LOG", False)
 
 
-
-
 # Setup all routes
 setup_all_routes(app)
+@app.get("/routes")
+async def list_routes(request):
 
-async def handler(request):
-    return text("OK")
-app.add_route(handler, "/test")
-
+    for r in list(app.router.routes_all.values()):
+        print(r)
+    #print(list(routes.values())[0].handler.__name__)
+    #return text("texto")
+    routes = []
+    for route in list(app.router.routes_all.values()):
+        routes.append({
+            "uri": route.path,
+            #"methods": list(route.methods),
+            "handler": route.name,
+        })
+    return json(routes)
 
 
 @app.listener("after_server_start")
@@ -51,10 +59,6 @@ def handle_request(request: Request):
     # return response.json(api_entry_point())
     return response.json( api_entry_point(), headers=_headers, status=200 )
 
-@app.get("/foo")
-async def foo_handler(request: Request):
-    print("ENTREIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII")
-    return text("I said foo!")
 
 @app.listener("after_server_start")
 async def connect_to_db(*args, **kwargs):

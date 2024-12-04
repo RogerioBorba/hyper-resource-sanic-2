@@ -3,27 +3,29 @@ from src.middlewares.security import authentication,permission
 from src.resources.unidade_federacao_a import UnidadeFederacaoAResource, UnidadeFederacaoACollectionResource
 
 def unidade_federacao_a_routes(app):
-    
+    @app.get(r'/unidade-federacao-a-list/<uf:[A-z]{2}>')
+    async def lim_unidade_federacao_a_sigla(request, uf):
+        sigla = uf.split("/")[0]
+        print(f"entrei primeiro: {uf}")
+        r = UnidadeFederacaoAResource(request)
+        return await r.get_representation(('sigla', sigla))
+
+    @app.route(r'/unidade-federacao-a-list/<uf:[A-Z]{2}>/<path:path>')
+    async def unidade_federacao_a_resource_sigla_path(request, uf, path):
+        print(f"entrei no segundo: {uf}")
+        r = UnidadeFederacaoAResource(request)
+        if path:
+            return await r.get_representation_given_path(('sigla', uf), path)
+        return await r.get_representation(('sigla', uf))
+
+
+
     @app.route(UnidadeFederacaoAResource.router_id())
     async def unidade_federacao_a_id(request, id):
         r = UnidadeFederacaoAResource(request)
         return await r.get_representation(id)
 
-    @app.route('unidade-federacao-a-list/<geocodigo:[0-9]{2}>')
-    async def lim_unidade_federacao_a_geocodigo(request, geocodigo):
-        r = UnidadeFederacaoAResource( request )
-        return await r.get_representation( ('geocodigo', geocodigo) )
 
-
-    @app.route('/unidade-federacao-a-list/<sigla:[A-z]{2}>', strict_slashes=False)
-    async def lim_unidade_federacao_a_sigla(request, sigla):
-        r = UnidadeFederacaoAResource( request )
-        return await r.get_representation( ('sigla', sigla))
-
-    @app.route('/unidade-federacao-a-list/<sigla:[a-zA-Z]{2}>/<path:path>')
-    async def lim_unidade_federacao_a_sigla_path(request, sigla, path):
-        r = UnidadeFederacaoAResource(request)
-        return await r.get_representation_given_path(('sigla', sigla), path)
 
     @app.route(UnidadeFederacaoAResource.router_id_path())
     async def unidade_federacao_a_resource_id_path(request, id, path):

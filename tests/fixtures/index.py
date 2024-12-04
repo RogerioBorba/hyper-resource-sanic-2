@@ -1,5 +1,5 @@
 import aiohttp
-from sanic import Sanic, response,text
+from sanic import Sanic, response,text, json
 from sanic.request import Request
 from environs import Env
 from src.orm.database_postgresql import DialectDbPostgresql
@@ -11,8 +11,6 @@ import os
 
 # Create Sanic app
 app = Sanic(__name__)
-
-
 # Setup env
 env = Env()
 env.read_env()  # read .env file, if it exists
@@ -21,9 +19,9 @@ host: str = env.str("HOST", "127.0.0.1")
 debug: bool = env.bool("DEBUG", False)
 access_log: bool = env.bool("ACESS_LOG", False)
 
-
 # Setup all routes
 setup_all_routes(app)
+
 
 @app.listener("before_server_start")
 async def init_session(app, loop):
@@ -54,6 +52,29 @@ async def connect_to_db(*args, **kwargs):
         app.ctx.engine = engine
         app.ctx.dialect_db_class = DialectDbPostgresql
         app.ctx.db = engine
+
+
+def create_app(config) -> Sanic:
+    app = Sanic("MyApp", config=config)
+
+    return app
+
+@app.get("/routes")
+async def list_routes(request):
+
+    for r in list(app.router.routes_all.values()):
+        print(r)
+    #print(list(routes.values())[0].handler.__name__)
+    #return text("texto")
+    routes = []
+    for route in list(app.router.routes_all.values()):
+        routes.append({
+            "uri": route.path,
+            #"methods": list(route.methods),
+            "handler": route.name,
+        })
+    return json(routes)
+
 
 if __name__ == "__main__":
     print(f"Starting server at port: {port}")

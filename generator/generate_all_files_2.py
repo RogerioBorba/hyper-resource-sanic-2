@@ -36,7 +36,7 @@ def load_model_classes():
 
 def main():
     parser = argparse.ArgumentParser(description="Programa para gerar classes")
-    parser.add_argument("--schema", required=True, help="Esquema")
+    parser.add_argument("--schema", required=False, help="Esquema")
     parser.add_argument("--db_url", required=True, help="URL do banco de dados")
     parser.add_argument("--remove_prefix", required=False, help="Remove prefix of the class")
     parser.add_argument("--remove_suffix", required=False, help="Remove suffix of the class")

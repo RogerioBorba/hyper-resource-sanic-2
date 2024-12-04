@@ -8,16 +8,14 @@ packages = [{include = "hyper_resource_sanic_2"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-pandas = "^2.0.3"
 sanic = {extras = ["ext"], version = "^23.3.0"}
 environs = "^11.0.0"
-matplotlib = "^3.7.2"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.19"}
 asyncio = "^3.4.3"
 geoalchemy2 = "^0.15.0"
 aiohttp = "^3.8.4"
 asyncpg = "^0.29.0"
-openpyxl = "^3.1.2"
+openpyxl = "^3.1.5"
 psycopg2 = "^2.9.6"
 spatialite = "^0.0.3"
 httpx = "^0.27.0"
@@ -26,8 +24,10 @@ fsspec = "^2024.3.1"
 pytest = "^8.1.2"
 cartopy = "^0.23.0"
 setuptools = "^69.5.1"
+matplotlib = "^3.9.3"
+duckdb = "^1.1.3"
 geopandas = "^1.0.1"
-duckdb = "^1.0.0"
+pandas = "^2.2.3"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
